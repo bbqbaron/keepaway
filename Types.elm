@@ -1,6 +1,7 @@
 module Types where
 
 import Dict exposing (Dict)
+import Random exposing (Seed)
 
 type Dir = Left|Down|Up|Right
 
@@ -29,7 +30,8 @@ type alias Grid = Dict Point Square
 
 type alias Model = {
         grid: Grid,
-        player: Player
+        player: Player,
+        seed: Seed
     }
 
 emptySquare : Square

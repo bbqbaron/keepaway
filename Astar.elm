@@ -47,8 +47,7 @@ distance (y1,x1) (y2,x2) =
 seek : Grid -> Point -> Point
 seek grid (y,x) =
     -- my goodness this is long
-    let _ = log "at" (y,x)
-        hasAnything _ {item} = item /= Nothing
+    let hasAnything _ {item} = item /= Nothing
         pointsOfInterest = Dict.filter hasAnything grid
         byDistance = 
             pointsOfInterest

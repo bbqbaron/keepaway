@@ -10,8 +10,12 @@ import Html exposing (div, Html)
 import Keyboard exposing (arrows, isDown, space)
 import List exposing (filter, foldl, head, length, map, reverse, sort, sortBy)
 import Maybe exposing (andThen, Maybe(..), withDefault)
-import Signal exposing ((<~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
+import Random exposing (generate, Generator, initialSeed, int, pair, Seed)
+import Signal exposing ((<~), (~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
 import Text exposing (fromString)
+
+import Signal.Extra exposing (foldp')
+import Signal.Time exposing (startTime)
 
 import Astar exposing (movePoint, pickDir, prioritize)
 import Const exposing (height, tileSize, width)
@@ -27,52 +31,86 @@ yRange = [0..height-1]
 xRange : List Int
 xRange = [0..width-1]
 
+numberOfMonsters = 5
+numberOfItems = 5
+maxMonsterHp = 6
+maxItemValue = 6
+
+-- generators
+pointGenerator : Generator (Int,Int)
+pointGenerator = pair (int 0 (height-1)) (int 0 (width-1))
+
+hpGenerator = int 1 maxMonsterHp
+valueGenerator = int 1 maxItemValue
+
 addItem : Maybe Item -> Maybe Square -> Maybe Square
 addItem i ms = case ms of
     Just s -> Just {s|item<-i}
     Nothing -> Nothing
 
-addItems : Grid -> Grid
-addItems grid =
-    let items = [((2,3),3),((5,0),6),((2,3),7),((5,1),4),((6,3),2)]
-        addItem value s =
-            case s of
-                Just s' -> Just {s'|item<-Just {name="I", value=value}}
+addItems : Model -> Model
+addItems model =
+    let grid = model.grid
+        seed = model.seed
+        generateItem _ (l,s) =
+            let (p,s') = generate pointGenerator s
+                (val,s'') = generate valueGenerator s'
+            in ((p,val)::l,s'')
+        (items, s') = foldl generateItem ([], seed) [0..numberOfItems]
+        addItem value square =
+            case square of
+                Just square' -> Just {square'|item<-Just {name="I", value=value}}
                 Nothing -> Nothing
-    in foldl (\(p,value) g' -> update p (addItem value) g') grid items
+        grid' = foldl (\(p,value) g' -> update p (addItem value) g') grid items
+    in {model|
+        grid<-grid',
+        seed<-s'}
 
-addPCs : Grid -> Grid
-addPCs grid = update 
-    (7,7) 
-    (\s->case s of
-        Just s' -> Just {s'|pc<-Just {name="F", xp=0}}
-        Nothing -> Nothing)
-    grid
+addPCs : Model -> Model
+addPCs model =
+    let grid = model.grid
+        grid' = update (7,7)
+            (\s->case s of
+                    Just s' -> Just {s'|pc<-Just {name="F", xp=0}}
+                    Nothing -> Nothing) grid
+    in {model|grid<-grid'}
 
-addMonsters : Grid -> Grid
-addMonsters grid =
-    let monsters = [((3,1),4), ((4,4),3), ((5,2),6), ((7,0),3)]
+addMonsters : Model -> Model
+addMonsters model =
+    -- TODO dedupe this with addItems
+    let grid = model.grid
+        seed = model.seed
+        generateMonster _ (l,s) =
+            let (p,s') = generate pointGenerator s
+                (hp,s'') = generate hpGenerator s'
+            in ((p,hp)::l,s'')
+        (monsters, s') = foldl generateMonster ([], initialSeed 0) [0..numberOfMonsters]
         addMonster hp s = 
             case s of
                 Just s' -> Just {s'|monster<-Just {name="M", hp=hp}}
                 Nothing -> Nothing
-    in foldl (\(p,hp) g'-> update p (addMonster hp) g') grid monsters
+        grid' = foldl (\(p,hp) g'-> update p (addMonster hp) g') grid monsters
+    in {model|
+        grid<-grid',
+        seed<-s'}
 
-init : Model
-init = {
+init : (a,Seed) -> Model
+init (_,s) = {
         player={
                 alive=True,
-                carrying = Nothing,
+                carrying=Nothing,
                 points=0,
-                position = (0,0)
+                position=(0,0)
             },
-        grid = foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g xRange) empty yRange
-            |> addItems
-            |> addPCs
-            |> addMonsters
-            -- who knows? pc could be standing on an item
-            |> resolveCollisions
-    } |> calculatePoints
+        seed=s,
+        grid=foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g xRange) empty yRange
+    } 
+        |> addItems
+        |> addPCs
+        |> addMonsters
+        -- who knows? pc could be standing on an item
+        |> resolveCollisions
+        |> calculatePoints
 
 dirsToAction : {x:Int, y:Int} -> Action
 dirsToAction {x,y} = 
@@ -139,9 +177,10 @@ unjust m = case m of
     Just m' -> m'
     Nothing -> Nothing
 
-resolveCollisions : Grid -> Grid
-resolveCollisions grid =
-    let resolve = \(y,x) s ->
+resolveCollisions : Model -> Model
+resolveCollisions model =
+    let grid = model.grid
+        resolve = \(y,x) s ->
             case s.pc of
                 Just pc ->
                     -- TODO having to unwrap a double Maybe seems wrong
@@ -159,7 +198,7 @@ resolveCollisions grid =
                         pc<-Just pc'
                     }
                 Nothing -> s
-    in Dict.map resolve grid
+    in {model|grid<-Dict.map resolve grid}
 
 calculatePoints : Model -> Model
 calculatePoints model =
@@ -179,8 +218,8 @@ movePCs : Model -> Model
 movePCs model = 
     let grid = model.grid
         pcs = Dict.filter (\_ {pc} -> pc /= Nothing) grid |> keys
-        grid' = foldl movePCFrom grid pcs |> resolveCollisions
-    in {model|grid<-grid'}
+        grid' = foldl movePCFrom grid pcs
+    in {model|grid<-grid'} |> resolveCollisions
 
 squashPlayer : Model -> Model
 squashPlayer model =
@@ -191,8 +230,8 @@ squashPlayer model =
         player' = cond hasPC {player|points<-0} player
     in {model|player<-player'}
 
-step : Action -> Model -> Model
-step action model = 
+step : (Action, Seed) -> Model -> Model
+step (action, _) model = 
     let model' = 
         case action of
             Move dir -> 
@@ -203,7 +242,7 @@ step action model =
                 in {model|player<-player'}
                     |> movePCs
             Fetch -> swapItems model
-            Restart -> cond (model.player.points<=0) init model
+            Restart -> cond (model.player.points<=0) (init ((), model.seed)) model
             _ -> model
     in model'
         |> calculatePoints
@@ -215,16 +254,20 @@ onRelease a k =
         |> foldp (\n o -> if o == Just Idle && not n then Just a else Just Idle) Nothing
         |> Signal.map (withDefault Idle)
 
+startTimeSeed : Signal Seed
+startTimeSeed = initialSeed << round <~ startTime
+
 state : Signal Model
-state = foldp step init 
-    (mergeMany 
-        [
-            updates.signal,
-            (dirsToAction <~ arrows),
-            space |> onRelease Fetch,
-            isDown 82 |> onRelease Restart
-        ]
-    )
+state = 
+        (,) <~ (mergeMany
+            [
+                updates.signal,
+                (dirsToAction <~ arrows),
+                space |> onRelease Fetch,
+                isDown 82 |> onRelease Restart
+            ]
+        ) ~ startTimeSeed
+    |> foldp' step init
 
 flatten : List (List a) -> List a
 flatten l = foldl (\subl accl -> foldl (::) accl subl) [] l
