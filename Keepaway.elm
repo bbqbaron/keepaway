@@ -18,8 +18,8 @@ type alias Point = (Int,Int)
 type Action = Idle|Fetch|Move Dir
 
 type alias Item = Int
-type alias Monster = Int
-type alias PC = String
+type alias Monster = {name:String}
+type alias PC = {name:String}
 
 type alias Square = {
         item: Maybe Item,
@@ -69,9 +69,18 @@ addPCs : Grid -> Grid
 addPCs grid = update 
     (7,7) 
     (\s->case s of
-        Just s -> Just {s|pc<-Just "F"}
+        Just s' -> Just {s'|pc<-Just {name="F"}}
         Nothing -> Nothing)
     grid
+
+addMonsters : Grid -> Grid
+addMonsters grid =
+    update
+        (7,6)
+        (\s->case s of
+                Just s' -> Just {s'|monster<-Just {name="M"}}
+                Nothing -> Nothing)
+        grid
 
 init : Model
 init = {
@@ -82,6 +91,7 @@ init = {
         grid = foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g xRange) empty yRange
             |> addItems
             |> addPCs
+            |> addMonsters
     }
 
 dirsToAction : {x:Int, y:Int} -> Action
@@ -145,11 +155,19 @@ movePCFrom (y,x) grid =
         grid'' = update dest (m (setPC pc)) grid'
     in grid''
 
+resolveCollisions : Grid -> Grid
+resolveCollisions grid =
+    let resolve = \(y,x) s ->
+            case s.pc of
+                Just _ -> {s|item<-Nothing, monster<-Nothing}
+                Nothing -> s
+    in Dict.map resolve grid
+
 movePCs : Model -> Model
 movePCs model = 
     let grid = model.grid
         pcs = Dict.filter (\_ {pc} -> pc /= Nothing) grid |> keys
-        grid' = foldl movePCFrom grid pcs
+        grid' = foldl movePCFrom grid pcs |> resolveCollisions
     in {model|grid<-grid'}
 
 step : Action -> Model -> Model
@@ -193,19 +211,20 @@ renderPlayer {carrying, position} =
                 Nothing -> base
         in withText |> move (toPos y x)
 
-renderPC : Point -> PC -> Form
-renderPC (y,x) pc = pc |> fromString |> text |> move (toPos y x)
-
 renderSquare : Int -> Int -> Square -> Form
-renderSquare y x {item, pc} = 
+renderSquare y x {item, monster, pc} = 
     let form = 
         case pc of
-            Just pc ->
-                pc |> fromString |> text
+            Just pc' ->
+                pc'.name |> fromString |> text
             Nothing -> 
-                case item of
-                    Just n -> n |> toString |> fromString |> text
-                    Nothing -> outlined (solid red) (square tileSize)
+                case monster of
+                    Just monster' ->
+                        monster'.name |> fromString |> text
+                    Nothing -> 
+                        case item of
+                            Just n -> n |> toString |> fromString |> text
+                            Nothing -> outlined (solid red) (square tileSize)
     in form |> move (toPos y x)
 
 renderRow : Int -> Grid -> List Form
