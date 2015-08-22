@@ -129,10 +129,18 @@ m fn a = case a of
 setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc} 
 
+pickDir : Point -> Point
+pickDir (y,x) =
+    let canRight = x > 0
+        canDown = y > 0
+    in  if | canRight -> (y,x-1)
+           | canDown -> (y-1,x)
+           | otherwise -> (y,x)
+
 movePCFrom : Point -> Grid -> Grid
 movePCFrom (y,x) grid =
-    let pc = get (y,x) grid |> withDefault emptySquare |> (.pc)
-        dest = bound (y-1, x-1)
+    let dest = pickDir (y,x)
+        pc = get (y,x) grid |> withDefault emptySquare |> (.pc)
         grid' = update (y,x) (m (setPC Nothing)) grid
         grid'' = update dest (m (setPC pc)) grid'
     in grid''
