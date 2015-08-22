@@ -45,18 +45,15 @@ height = 8
 width = 8
 origin = (tileSize * (height / 2 - 0.5), tileSize * (width / 2 * -1 + 0.5))
 
-zip2 : List a -> List a -> List (List a)
-zip2 = map2 (\i1 i2 -> [i1,i2])
-
 emptySquare = {item=Just 0, monster=Nothing, pc=Nothing}
 
 init : Model
 init = {
         player={
                 carrying = Nothing,
-                position = (2,2)
+                position = (0,0)
             },
-        grid = foldl (\[x,y] g -> insert (x,y) emptySquare g) empty (zip2 [0..height-1] [0..width-1])
+        grid = foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g [0..width-1]) empty [0..height-1]
     }
 
 dirsToAction {x,y} = 
@@ -87,6 +84,16 @@ bound (y,x) = (max 0 (min y (height-1)), max 0 (min x (width-1)))
     Just i -> fn i |> Just
     Nothing -> Nothing
 
+removeItem : Maybe Square -> Maybe Square
+removeItem ms = case ms of
+    Just s -> Just {s|item<-Nothing}
+    Nothing -> Nothing
+
+addItem : Item -> Maybe Square -> Maybe Square
+addItem i ms = case ms of
+    Just s -> Just {s|item<-Just i}
+    Nothing -> Nothing
+
 update : Action -> Model -> Model
 update action model = case action of
     Move dir -> 
@@ -100,27 +107,27 @@ update action model = case action of
             grid = model.grid
             carrying = player.carrying
             position = player.position
-        in if carrying == Nothing then
-            ((get (position) grid)
-                ~|> (.item)
-                ~|> (\i ->
-                        let player' = {player|carrying<-i}
-                            grid' = Dict.update player.position ((<|~) (\s->{s|item<-Nothing})) grid
-                        in {
-                            model|
-                                player<-player',
-                                grid<-grid'
-                            }
-                    ))
-                |> withDefault model
-            else
-                let player' = {player|carrying<-Nothing}
-                    grid' = Dict.update position ((<|~) (\s->{s|item<-carrying})) grid
-                in {
-                    model|
-                        player<-player',
-                        grid<-grid'
-                }
+        in
+            case carrying of
+                Nothing ->
+                    case get position grid of
+                        Just {item} -> 
+                            let player' = {player|carrying<-item}
+                                grid' = Dict.update position removeItem grid
+                            in {
+                                    model|
+                                        player<-player',
+                                        grid<-grid'
+                                    }
+                        Nothing -> model
+                Just item ->
+                    let player' = {player|carrying<-Nothing}
+                        grid' = Dict.update position (addItem item) grid
+                    in {
+                        model|
+                            player<-player',
+                            grid<-grid'
+                    }
     _ -> model
 
 state = foldp update init 
@@ -140,17 +147,17 @@ toPos y x =
     let (oY, oX) = origin
     in (oY - (toFloat (y*tileSize)), oX + (toFloat (x*tileSize)))
 
-renderItem (y,x) = filled red (rect tileSize tileSize)
+renderItem (y,x) = filled red (square tileSize)
     |> move (toPos y x)
 
 renderPlayer : Player -> Form
 renderPlayer {carrying, position} = 
     let (y,x) = position
-    in filled (if carrying /= Nothing then red else green) (rect tileSize tileSize)
+    in filled (if carrying /= Nothing then red else green) (square tileSize)
         |> move (toPos y x)
 
 renderSquare : Int -> Int -> Square -> Form
-renderSquare y x {item} = rect tileSize tileSize 
+renderSquare y x {item} = square tileSize
     |> 
         (if item == Nothing then
             outlined (solid red)
@@ -160,7 +167,7 @@ renderSquare y x {item} = rect tileSize tileSize
 renderRow : Int -> Grid -> List Form
 renderRow y g = map (\x->get (y,x) g |> withDefault emptySquare |> renderSquare y x) [0..width-1]
 
-addForm f l = f :: l
+addForm f l = l ++ [f]
 
 renderMap {grid, player} =
     map (\y->renderRow y grid) [0..height-1]
