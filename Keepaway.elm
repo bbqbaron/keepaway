@@ -7,7 +7,7 @@ import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, 
 import Graphics.Element exposing (Element)
 import Html exposing (div, Html)
 import Keyboard exposing (arrows, space)
-import List exposing (filter, foldl, head, map)
+import List exposing (filter, foldl, head, length, map)
 import Maybe exposing (andThen, Maybe(..), withDefault)
 import Signal exposing ((<~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
 import Text exposing (fromString)
@@ -141,7 +141,7 @@ m fn a = case a of
     Nothing -> Nothing
 
 setPC : Maybe PC -> Square -> Square
-setPC pc s = {s|pc<-pc} 
+setPC pc s = {s|pc<-pc}
 
 hasBooty : Grid -> Point -> Bool
 hasBooty grid (y,x) =
@@ -157,7 +157,9 @@ pickDir grid (y,x) =
     let dirs = [(1,0),(-1,0),(0,1),(0,-1)]
         dests = map (movePoint (y,x)) dirs
         inBounds = map bound dests |> filter ((/=) (y,x))
-        candidates = filter (hasBooty grid) inBounds
+        booty = filter (hasBooty grid) inBounds
+        found = length booty > 0
+        candidates = cond found booty (filter (\(y',x') -> y' > y || x' < x ) inBounds)
     in head candidates |> withDefault (y,x)
 
 movePCFrom : Point -> Grid -> Grid
