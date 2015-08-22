@@ -12,42 +12,14 @@ import Maybe exposing (andThen, Maybe(..), withDefault)
 import Signal exposing ((<~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
 import Text exposing (fromString)
 
-type Dir = Left|Down|Up|Right
-
-type alias Point = (Int,Int)
-
-type Action = Idle|Fetch|Move Dir
-
-type alias Item = {name:String, value:Int}
-type alias Monster = {name:String, hp:Int}
-type alias PC = {name:String, xp:Int}
-
-type alias Square = {
-        item: Maybe Item,
-        monster: Maybe Monster,
-        pc: Maybe PC
-    }
-
-type alias Player = {
-        carrying: Maybe Item,
-        position: Point,
-        points: Int,
-        alive:Bool
-    }
-
-type alias Grid = Dict Point Square
-
-type alias Model = {
-        grid: Grid,
-        player: Player
-    }
+import Astar exposing (movePoint, pickDir, prioritize)
+import Const exposing (height, tileSize, width)
+import Types exposing (..)
+import Util exposing (bound, cond)
 
 updates : Mailbox Action
 updates = mailbox Idle
 
-tileSize = 75
-height = 8
-width = 8
 origin = (tileSize * (height / 2 - 0.5), tileSize * (width / 2 * -1 + 0.5))
 
 emptySquare : Square
@@ -98,6 +70,8 @@ init = {
             |> addItems
             |> addPCs
             |> addMonsters
+            -- who knows? pc could be standing on an item
+            |> resolveCollisions
     } |> calculatePoints
 
 dirsToAction : {x:Int, y:Int} -> Action
@@ -116,9 +90,6 @@ dirToPoint d =
         Up -> (0,1)
         Down -> (0,-1)
         _ -> (0,0)
-
-bound : Point -> Point
-bound (y,x) = (max 0 (min y (height-1)), max 0 (min x (width-1)))
 
 swapItems : Model -> Model
 swapItems model =
@@ -145,30 +116,6 @@ m fn a = case a of
 setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc}
 
-prioritize : Grid -> Point -> (Int, Point)
-prioritize grid p =
-    let priority = 
-        case get p grid of
-            Just {item, monster} -> 
-                cond (item /= Nothing) 5 0
-                    +
-                cond (monster /= Nothing) -10 0
-            Nothing -> 0
-    in (priority, p)
-
-movePoint : Point -> Point -> Point
-movePoint (y,x) (y1,x1) = (y+y1, x+x1)
-
-pickDir : Grid -> Point -> Point
-pickDir grid (y,x) =
-    let dirs = [(1,0),(-1,0),(0,1),(0,-1)]
-        dests = map (movePoint (y,x)) dirs
-        inBounds = map bound dests |> filter ((/=) (y,x))
-        booty = map (prioritize grid) inBounds |> sortBy fst |> reverse |> map snd
-        found = length booty > 0
-        candidates = cond found booty (filter (\(y',x') -> y' > y || x' < x ) inBounds)
-    in head candidates |> withDefault (y,x)
-
 movePCFrom : Point -> Grid -> Grid
 movePCFrom (y,x) grid =
     let current = get (y,x) grid |> withDefault emptySquare
@@ -178,9 +125,6 @@ movePCFrom (y,x) grid =
         grid' = update (y,x) (m (setPC Nothing)) grid
         grid'' = update dest (m (setPC pc)) grid'
     in grid''
-
-cond : Bool -> a -> a -> a
-cond bool a b = if bool then a else b
 
 damage : Monster -> Maybe Monster
 damage monster =
