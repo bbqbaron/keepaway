@@ -1,13 +1,13 @@
 module Keepaway where
 
-import Color exposing (..)
+import Color exposing (green, red)
 import Debug exposing (log)
 import Dict exposing (Dict, empty, get, insert, keys, update)
-import Graphics.Collage exposing (..)
+import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, solid, square, text)
 import Graphics.Element exposing (Element)
 import Html exposing (div, Html)
-import Keyboard exposing (..)
-import List exposing (..)
+import Keyboard exposing (arrows, space)
+import List exposing (filter, foldl, head, map)
 import Maybe exposing (andThen, Maybe(..), withDefault)
 import Signal exposing ((<~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
 import Text exposing (fromString)
@@ -143,17 +143,26 @@ m fn a = case a of
 setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc} 
 
-pickDir : Point -> Point
-pickDir (y,x) =
-    let canRight = x > 0
-        canDown = y > 0
-    in  if | canRight -> (y,x-1)
-           | canDown -> (y-1,x)
-           | otherwise -> (y,x)
+hasBooty : Grid -> Point -> Bool
+hasBooty grid (y,x) =
+    case get (y,x) grid of
+        Just {item, monster} -> item /= Nothing || monster /= Nothing
+        Nothing -> False
+
+movePoint : Point -> Point -> Point
+movePoint (y,x) (y1,x1) = (y+y1, x+x1)
+
+pickDir : Grid -> Point -> Point
+pickDir grid (y,x) =
+    let dirs = [(1,0),(-1,0),(0,1),(0,-1)]
+        dests = map (movePoint (y,x)) dirs
+        inBounds = map bound dests |> filter ((/=) (y,x))
+        candidates = filter (hasBooty grid) inBounds
+    in head candidates |> withDefault (y,x)
 
 movePCFrom : Point -> Grid -> Grid
 movePCFrom (y,x) grid =
-    let dest = pickDir (y,x)
+    let dest = pickDir grid (y,x)
         pc = get (y,x) grid |> withDefault emptySquare |> (.pc)
         grid' = update (y,x) (m (setPC Nothing)) grid
         grid'' = update dest (m (setPC pc)) grid'
