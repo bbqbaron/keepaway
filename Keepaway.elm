@@ -211,17 +211,20 @@ movePCs model =
     in {model|grid<-grid'}
 
 step : Action -> Model -> Model
-step action model = case action of
-    Move dir -> 
-        let player = model.player
-            (y,x) = player.position
-            (y',x') = dirToPoint dir
-            player' = {player|position<-bound (y+y', x+x')}
-        in {model|player<-player'}
-            |> movePCs
-            |> calculatePoints
-    Fetch -> swapItems model
-    _ -> model
+step action model = 
+    let model' = 
+        case action of
+            Move dir -> 
+                let player = model.player
+                    (y,x) = player.position
+                    (y',x') = dirToPoint dir
+                    player' = {player|position<-bound (y+y', x+x')}
+                in {model|player<-player'}
+                    |> movePCs
+            Fetch -> swapItems model
+            _ -> model
+    in model'
+        |> calculatePoints
 
 state : Signal Model
 state = foldp step init 
@@ -288,10 +291,15 @@ renderPoints model = model.player.points |> toString |> Html.text
 
 render : Model -> Html
 render model =
-    div [] [
-        renderGrid model |> Html.fromElement,
-        renderPoints model
-    ]
+    if model.player.points > 0 then
+        div [] [
+            renderGrid model |> Html.fromElement,
+            renderPoints model
+        ]
+    else
+        div [] [
+            Html.text "DEAD"
+        ]
 
 main : Signal Html
 main = render <~ state
