@@ -31,7 +31,8 @@ type alias Square = {
 type alias Player = {
         carrying: Maybe Item,
         position: Point,
-        points: Int
+        points: Int,
+        alive:Bool
     }
 
 type alias Grid = Dict Point Square
@@ -88,6 +89,7 @@ addMonsters grid =
 init : Model
 init = {
         player={
+                alive=True,
                 carrying = Nothing,
                 points=0,
                 position = (0,0)
@@ -210,6 +212,15 @@ movePCs model =
         grid' = foldl movePCFrom grid pcs |> resolveCollisions
     in {model|grid<-grid'}
 
+squashPlayer : Model -> Model
+squashPlayer model =
+    let player = model.player
+        pos = player.position
+        square = get pos model.grid |> withDefault emptySquare
+        hasPC = square.pc /= Nothing
+        player' = cond hasPC {player|points<-0} player
+    in {model|player<-player'}
+
 step : Action -> Model -> Model
 step action model = 
     let model' = 
@@ -225,6 +236,7 @@ step action model =
             _ -> model
     in model'
         |> calculatePoints
+        |> squashPlayer
 
 state : Signal Model
 state = foldp step init 
