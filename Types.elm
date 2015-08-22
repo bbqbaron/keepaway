@@ -33,4 +33,4 @@ type alias Model = {
     }
 
 emptySquare : Square
-emptySquare = {item=Just {name="I", value=0}, monster=Nothing, pc=Nothing}
+emptySquare = {item=Nothing, monster=Nothing, pc=Nothing}

@@ -34,8 +34,12 @@ addItem i ms = case ms of
 
 addItems : Grid -> Grid
 addItems grid =
-    let makeItem y x = Just {name=toString (y*10+x), value=1}
-    in foldl (\y g->foldl (\x g'-> update (y,x) (addItem (makeItem y x)) g') g xRange) grid yRange
+    let items = [((2,3),3),((5,0),6),((2,3),7),((5,1),4),((6,3),2)]
+        addItem value s =
+            case s of
+                Just s' -> Just {s'|item<-Just {name="I", value=value}}
+                Nothing -> Nothing
+    in foldl (\(p,value) g' -> update p (addItem value) g') grid items
 
 addPCs : Grid -> Grid
 addPCs grid = update 
@@ -140,9 +144,14 @@ resolveCollisions grid =
     let resolve = \(y,x) s ->
             case s.pc of
                 Just pc ->
+                    -- TODO having to unwrap a double Maybe seems wrong
                     let monster' = m damage s.monster |> unjust
+                    -- TODO seems redundant to check item existence twice
                         getXp = s.item /= Nothing || (s.monster /= Nothing && monster' == Nothing)
-                        xp' = pc.xp + (cond getXp 1 0)
+                        value = case s.item of
+                            Just i -> i.value
+                            Nothing -> 0
+                        xp' = pc.xp + (cond getXp value 0)
                         pc' = {pc|xp<-xp'}
                     in {s|
                         item<-Nothing, 
