@@ -1,6 +1,7 @@
 module Keepaway where
 
 import Color exposing (..)
+import Debug exposing (log)
 import Graphics.Collage exposing (..)
 import Graphics.Element exposing (..)
 import Html exposing (..)
@@ -11,6 +12,7 @@ import Signal exposing ((<~), foldp, mailbox, merge)
 
 type Dir = Left|Down|Up|Right
 
+-- up, right
 type alias Point = (Int,Int)
 
 type Action = Idle|Fetch|Move Dir
@@ -42,10 +44,31 @@ init = {
         position = (2,2)
     }
 
+dirsToAction {x,y} = 
+    if | x == -1 -> Move Left
+       | x == 1 -> Move Right
+       | y == -1 -> Move Down
+       | y == 1 -> Move Up
+       | otherwise -> Idle
+
+dirToPoint d = 
+    case d of
+        Left -> (1,0)
+        Right -> (-1,0)
+        Up -> (0,1)
+        Down -> (0,-1)
+        _ -> (0,0)
+
+bound (y,x) = (max 0 (min y (height-1)), max 0 (min x (width-1)))
+
 update action model = case action of
+    Move dir -> 
+        let (y,x) = model.position
+            (y',x') = dirToPoint dir
+        in {model|position<-bound (y+y', x+x') |> log "pos"}
     _ -> model
 
-state = foldp update init updates.signal
+state = foldp update init (merge updates.signal (dirsToAction <~ arrows))
 
 flatten l = foldl (\subl accl -> foldl (::) accl subl) [] l
 
