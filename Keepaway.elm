@@ -47,12 +47,12 @@ addPCs grid = update
 
 addMonsters : Grid -> Grid
 addMonsters grid =
-    update
-        (7,6)
-        (\s->case s of
-                Just s' -> Just {s'|monster<-Just {name="M", hp=4}}
-                Nothing -> Nothing)
-        grid
+    let monsters = [((3,1),4), ((4,4),3), ((5,2),6), ((7,0),3)]
+        addMonster hp s = 
+            case s of
+                Just s' -> Just {s'|monster<-Just {name="M", hp=hp}}
+                Nothing -> Nothing
+    in foldl (\(p,hp) g'-> update p (addMonster hp) g') grid monsters
 
 init : Model
 init = {
