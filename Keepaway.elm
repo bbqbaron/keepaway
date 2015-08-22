@@ -19,7 +19,7 @@ type alias Point = (Int,Int)
 type Action = Idle|Fetch|Move Dir
 
 type alias Item = {name:String, value:Int}
-type alias Monster = {name:String}
+type alias Monster = {name:String, hp:Int}
 type alias PC = {name:String, xp:Int}
 
 type alias Square = {
@@ -82,7 +82,7 @@ addMonsters grid =
     update
         (7,6)
         (\s->case s of
-                Just s' -> Just {s'|monster<-Just {name="M"}}
+                Just s' -> Just {s'|monster<-Just {name="M", hp=4}}
                 Nothing -> Nothing)
         grid
 
@@ -166,7 +166,9 @@ pickDir grid (y,x) =
 
 movePCFrom : Point -> Grid -> Grid
 movePCFrom (y,x) grid =
-    let dest = pickDir grid (y,x)
+    let current = get (y,x) grid |> withDefault emptySquare
+        stuck = current.monster /= Nothing
+        dest = pickDir grid (y,x) |> cond stuck (y,x)
         pc = get (y,x) grid |> withDefault emptySquare |> (.pc)
         grid' = update (y,x) (m (setPC Nothing)) grid
         grid'' = update dest (m (setPC pc)) grid'
@@ -175,17 +177,32 @@ movePCFrom (y,x) grid =
 cond : Bool -> a -> a -> a
 cond bool a b = if bool then a else b
 
+damage : Monster -> Maybe Monster
+damage monster =
+    let hp' = monster.hp - 1
+    in cond 
+        (hp'>0) 
+        (Just {monster|hp<-hp'})
+        Nothing
+
+unjust : Maybe (Maybe a) -> Maybe a
+unjust m = case m of
+    Just m' -> m'
+    Nothing -> Nothing
+
 resolveCollisions : Grid -> Grid
 resolveCollisions grid =
     let resolve = \(y,x) s ->
             case s.pc of
                 Just pc ->
-                    let getXp = s.item /= Nothing || s.monster /= Nothing
+                    let monster' = m damage s.monster |> unjust
+                        getXp = s.item /= Nothing || (s.monster /= Nothing && monster' == Nothing)
                         xp' = pc.xp + (cond getXp 1 0)
                         pc' = {pc|xp<-xp'}
+                        
                     in {s|
                         item<-Nothing, 
-                        monster<-Nothing,
+                        monster<-monster',
                         pc<-Just pc'
                     }
                 Nothing -> s
@@ -278,7 +295,9 @@ renderSquare y x {item, monster, pc} =
             Nothing -> 
                 case monster of
                     Just monster' ->
-                        monster'.name |> fromString |> text
+                        monster'.name ++ ": " ++ (toString monster'.hp) 
+                            |> fromString 
+                            |> text
                     Nothing -> 
                         case item of
                             Just n -> n.name |> toString |> fromString |> text
