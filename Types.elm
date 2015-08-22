@@ -6,7 +6,7 @@ type Dir = Left|Down|Up|Right
 
 type alias Point = (Int,Int)
 
-type Action = Idle|Fetch|Move Dir
+type Action = Idle|Fetch|Move Dir|Restart
 
 type alias Item = {name:String, value:Int}
 type alias Monster = {name:String, hp:Int}
@@ -31,3 +31,6 @@ type alias Model = {
         grid: Grid,
         player: Player
     }
+
+emptySquare : Square
+emptySquare = {item=Just {name="I", value=0}, monster=Nothing, pc=Nothing}

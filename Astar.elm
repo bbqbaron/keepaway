@@ -26,7 +26,7 @@ movePoint (y,x) (y1,x1) = (y+y1, x+x1)
 pickDir : Grid -> Point -> Point
 pickDir grid (y,x) =
     -- TODO cache and recalc if you're there
-    let (y',x') = seek grid (y,x) |> log "sought"
+    let (y',x') = seek grid (y,x)
         (y'',x'') =
             if | y' > y -> (1,0)
                | y' < y -> (-1,0)
@@ -35,7 +35,6 @@ pickDir grid (y,x) =
                | otherwise -> (0,0)
     in movePoint (y,x) (y'',x'')
         |> bound
-        |> log "dest"
 
 distance : Point -> Point -> (Int, Point)
 distance (y1,x1) (y2,x2) =
@@ -50,14 +49,14 @@ seek grid (y,x) =
     -- my goodness this is long
     let _ = log "at" (y,x)
         hasAnything _ {item} = item /= Nothing
-        pointsOfInterest = Dict.filter hasAnything grid |> log "poi"
+        pointsOfInterest = Dict.filter hasAnything grid
         byDistance = 
             pointsOfInterest
                 |> keys
                 |> map (distance (y,x))
                 |> sortBy fst
         shortestDistance = head byDistance |> withDefault (0,(0,0)) |> fst
-        closest = filter (fst >> (==) shortestDistance) byDistance |> log "closest"
+        closest = filter (fst >> (==) shortestDistance) byDistance
         prioritized =
             closest
                 |> map snd

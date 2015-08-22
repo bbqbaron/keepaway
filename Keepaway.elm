@@ -1,12 +1,13 @@
 module Keepaway where
 
+import Char exposing (toCode)
 import Color exposing (green, red)
 import Debug exposing (log)
 import Dict exposing (Dict, empty, get, insert, keys, update)
 import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, solid, square, text)
 import Graphics.Element exposing (Element)
 import Html exposing (div, Html)
-import Keyboard exposing (arrows, space)
+import Keyboard exposing (arrows, isDown, space)
 import List exposing (filter, foldl, head, length, map, reverse, sort, sortBy)
 import Maybe exposing (andThen, Maybe(..), withDefault)
 import Signal exposing ((<~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
@@ -15,15 +16,10 @@ import Text exposing (fromString)
 import Astar exposing (movePoint, pickDir, prioritize)
 import Const exposing (height, tileSize, width)
 import Types exposing (..)
-import Util exposing (bound, cond)
+import Util exposing (bound, cond, origin)
 
 updates : Mailbox Action
 updates = mailbox Idle
-
-origin = (tileSize * (height / 2 - 0.5), tileSize * (width / 2 * -1 + 0.5))
-
-emptySquare : Square
-emptySquare = {item=Just {name="I", value=0}, monster=Nothing, pc=Nothing}
 
 yRange : List Int
 yRange = [0..height-1]
@@ -198,10 +194,17 @@ step action model =
                 in {model|player<-player'}
                     |> movePCs
             Fetch -> swapItems model
+            Restart -> cond (model.player.points<=0) init model
             _ -> model
     in model'
         |> calculatePoints
         |> squashPlayer
+
+onRelease : Action -> Signal Bool -> Signal Action
+onRelease a k =
+    k
+        |> foldp (\n o -> if o == Just Idle && not n then Just a else Just Idle) Nothing
+        |> Signal.map (withDefault Idle)
 
 state : Signal Model
 state = foldp step init 
@@ -209,9 +212,8 @@ state = foldp step init
         [
             updates.signal,
             (dirsToAction <~ arrows),
-            space
-                |> foldp (\n o -> if o == Just Idle && not n then Just Fetch else Just Idle) Nothing
-                |> Signal.map (withDefault Idle)
+            space |> onRelease Fetch,
+            isDown 82 |> onRelease Restart
         ]
     )
 
