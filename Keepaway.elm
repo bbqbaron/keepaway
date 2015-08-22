@@ -7,7 +7,7 @@ import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, 
 import Graphics.Element exposing (Element)
 import Html exposing (div, Html)
 import Keyboard exposing (arrows, space)
-import List exposing (filter, foldl, head, length, map)
+import List exposing (filter, foldl, head, length, map, reverse, sort, sortBy)
 import Maybe exposing (andThen, Maybe(..), withDefault)
 import Signal exposing ((<~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
 import Text exposing (fromString)
@@ -145,11 +145,16 @@ m fn a = case a of
 setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc}
 
-hasBooty : Grid -> Point -> Bool
-hasBooty grid (y,x) =
-    case get (y,x) grid of
-        Just {item, monster} -> item /= Nothing || monster /= Nothing
-        Nothing -> False
+prioritize : Grid -> Point -> (Int, Point)
+prioritize grid p =
+    let priority = 
+        case get p grid of
+            Just {item, monster} -> 
+                cond (item /= Nothing) 5 0
+                    +
+                cond (monster /= Nothing) -10 0
+            Nothing -> 0
+    in (priority, p)
 
 movePoint : Point -> Point -> Point
 movePoint (y,x) (y1,x1) = (y+y1, x+x1)
@@ -159,7 +164,7 @@ pickDir grid (y,x) =
     let dirs = [(1,0),(-1,0),(0,1),(0,-1)]
         dests = map (movePoint (y,x)) dirs
         inBounds = map bound dests |> filter ((/=) (y,x))
-        booty = filter (hasBooty grid) inBounds
+        booty = map (prioritize grid) inBounds |> sortBy fst |> reverse |> map snd
         found = length booty > 0
         candidates = cond found booty (filter (\(y',x') -> y' > y || x' < x ) inBounds)
     in head candidates |> withDefault (y,x)
@@ -199,7 +204,6 @@ resolveCollisions grid =
                         getXp = s.item /= Nothing || (s.monster /= Nothing && monster' == Nothing)
                         xp' = pc.xp + (cond getXp 1 0)
                         pc' = {pc|xp<-xp'}
-                        
                     in {s|
                         item<-Nothing, 
                         monster<-monster',
