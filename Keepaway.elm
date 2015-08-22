@@ -1,14 +1,14 @@
 module Keepaway where
 
 import Color exposing (..)
-import Debug exposing (..)
-import Dict exposing (Dict, empty, get, insert)
+import Debug exposing (log)
+import Dict exposing (Dict, empty, get, insert, update)
 import Graphics.Collage exposing (..)
-import Html exposing (..)
 import Keyboard exposing (..)
 import List exposing (..)
 import Maybe exposing (andThen, Maybe(..), withDefault)
 import Signal exposing ((<~), dropRepeats, foldp, mailbox, mergeMany)
+import Text exposing (fromString)
 
 type Dir = Left|Down|Up|Right
 
@@ -47,6 +47,20 @@ origin = (tileSize * (height / 2 - 0.5), tileSize * (width / 2 * -1 + 0.5))
 
 emptySquare = {item=Just 0, monster=Nothing, pc=Nothing}
 
+yRange = [0..height-1]
+xRange = [0..width-1]
+
+--items = map (\y -> map (\x -> y*10+x) xRange) yRange
+
+addItem : Maybe Item -> Maybe Square -> Maybe Square
+addItem i ms = case ms of
+    Just s -> Just {s|item<-i}
+    Nothing -> Nothing
+
+addItems : Grid -> Grid
+addItems grid =
+    foldl (\y g->foldl (\x g'-> update (y,x) (addItem (Just (y*10+x))) g') g xRange) grid yRange
+
 init : Model
 init = {
         player={
@@ -54,6 +68,7 @@ init = {
                 position = (0,0)
             },
         grid = foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g [0..width-1]) empty [0..height-1]
+            |> addItems
     }
 
 dirsToAction {x,y} = 
@@ -74,63 +89,35 @@ dirToPoint d =
 bound : (Int,Int) -> (Int,Int)
 bound (y,x) = (max 0 (min y (height-1)), max 0 (min x (width-1)))
 
-(~|>) : Maybe a -> (a -> b) -> Maybe b
-(~|>) a fn = case a of
-    Just i -> fn i |> Just
-    Nothing -> Nothing
+swapItems : Model -> Model
+swapItems model =
+    let player = model.player
+        grid = model.grid
+        position = player.position
+        carrying = player.carrying
+        item = case get position grid of
+            Just {item} -> item
+            Nothing -> Nothing
+        player' = {player|carrying<-item}
+        grid' = update position (addItem carrying) grid
+    in {
+        model|
+            player<-player',
+            grid<-grid'
+    }
 
-(<|~) : (a -> b) -> Maybe a -> Maybe b
-(<|~) fn a = case a of
-    Just i -> fn i |> Just
-    Nothing -> Nothing
-
-removeItem : Maybe Square -> Maybe Square
-removeItem ms = case ms of
-    Just s -> Just {s|item<-Nothing}
-    Nothing -> Nothing
-
-addItem : Item -> Maybe Square -> Maybe Square
-addItem i ms = case ms of
-    Just s -> Just {s|item<-Just i}
-    Nothing -> Nothing
-
-update : Action -> Model -> Model
-update action model = case action of
+step : Action -> Model -> Model
+step action model = case action of
     Move dir -> 
         let player = model.player
             (y,x) = player.position
             (y',x') = dirToPoint dir
             player' = {player|position<-bound (y+y', x+x')}
         in {model|player<-player'}
-    Fetch ->
-        let player = model.player
-            grid = model.grid
-            carrying = player.carrying
-            position = player.position
-        in
-            case carrying of
-                Nothing ->
-                    case get position grid of
-                        Just {item} -> 
-                            let player' = {player|carrying<-item}
-                                grid' = Dict.update position removeItem grid
-                            in {
-                                    model|
-                                        player<-player',
-                                        grid<-grid'
-                                    }
-                        Nothing -> model
-                Just item ->
-                    let player' = {player|carrying<-Nothing}
-                        grid' = Dict.update position (addItem item) grid
-                    in {
-                        model|
-                            player<-player',
-                            grid<-grid'
-                    }
+    Fetch -> swapItems model
     _ -> model
 
-state = foldp update init 
+state = foldp step init 
     (mergeMany 
         [
             updates.signal,
@@ -147,9 +134,6 @@ toPos y x =
     let (oY, oX) = origin
     in (oY - (toFloat (y*tileSize)), oX + (toFloat (x*tileSize)))
 
-renderItem (y,x) = filled red (square tileSize)
-    |> move (toPos y x)
-
 renderPlayer : Player -> Form
 renderPlayer {carrying, position} = 
     let (y,x) = position
@@ -157,11 +141,10 @@ renderPlayer {carrying, position} =
         |> move (toPos y x)
 
 renderSquare : Int -> Int -> Square -> Form
-renderSquare y x {item} = square tileSize
-    |> 
-        (if item == Nothing then
-            outlined (solid red)
-        else filled red)
+renderSquare y x {item} = 
+    (case item of
+        Just n -> n |> toString |> fromString |> text
+        Nothing -> outlined (solid red) (square tileSize))
     |> move (toPos y x)
 
 renderRow : Int -> Grid -> List Form
