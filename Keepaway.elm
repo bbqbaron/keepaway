@@ -5,6 +5,7 @@ import Debug exposing (log)
 import Dict exposing (Dict, empty, get, insert, keys, update)
 import Graphics.Collage exposing (..)
 import Graphics.Element exposing (Element)
+import Html exposing (div, Html)
 import Keyboard exposing (..)
 import List exposing (..)
 import Maybe exposing (andThen, Maybe(..), withDefault)
@@ -17,9 +18,9 @@ type alias Point = (Int,Int)
 
 type Action = Idle|Fetch|Move Dir
 
-type alias Item = Int
+type alias Item = {name:String, value:Int}
 type alias Monster = {name:String}
-type alias PC = {name:String}
+type alias PC = {name:String, xp:Int}
 
 type alias Square = {
         item: Maybe Item,
@@ -29,7 +30,8 @@ type alias Square = {
 
 type alias Player = {
         carrying: Maybe Item,
-        position: Point
+        position: Point,
+        points: Int
     }
 
 type alias Grid = Dict Point Square
@@ -48,7 +50,7 @@ width = 8
 origin = (tileSize * (height / 2 - 0.5), tileSize * (width / 2 * -1 + 0.5))
 
 emptySquare : Square
-emptySquare = {item=Just 0, monster=Nothing, pc=Nothing}
+emptySquare = {item=Just {name="I", value=0}, monster=Nothing, pc=Nothing}
 
 yRange : List Int
 yRange = [0..height-1]
@@ -63,13 +65,14 @@ addItem i ms = case ms of
 
 addItems : Grid -> Grid
 addItems grid =
-    foldl (\y g->foldl (\x g'-> update (y,x) (addItem (Just (y*10+x))) g') g xRange) grid yRange
+    let makeItem y x = Just {name=toString (y*10+x), value=1}
+    in foldl (\y g->foldl (\x g'-> update (y,x) (addItem (makeItem y x)) g') g xRange) grid yRange
 
 addPCs : Grid -> Grid
 addPCs grid = update 
     (7,7) 
     (\s->case s of
-        Just s' -> Just {s'|pc<-Just {name="F"}}
+        Just s' -> Just {s'|pc<-Just {name="F", xp=0}}
         Nothing -> Nothing)
     grid
 
@@ -86,13 +89,14 @@ init : Model
 init = {
         player={
                 carrying = Nothing,
+                points=0,
                 position = (0,0)
             },
         grid = foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g xRange) empty yRange
             |> addItems
             |> addPCs
             |> addMonsters
-    }
+    } |> calculatePoints
 
 dirsToAction : {x:Int, y:Int} -> Action
 dirsToAction {x,y} = 
@@ -155,13 +159,38 @@ movePCFrom (y,x) grid =
         grid'' = update dest (m (setPC pc)) grid'
     in grid''
 
+cond : Bool -> a -> a -> a
+cond bool a b = if bool then a else b
+
 resolveCollisions : Grid -> Grid
 resolveCollisions grid =
     let resolve = \(y,x) s ->
             case s.pc of
-                Just _ -> {s|item<-Nothing, monster<-Nothing}
+                Just pc ->
+                    let getXp = s.item /= Nothing || s.monster /= Nothing
+                        xp' = pc.xp + (cond getXp 1 0)
+                        pc' = {pc|xp<-xp'}
+                    in {s|
+                        item<-Nothing, 
+                        monster<-Nothing,
+                        pc<-Just pc'
+                    }
                 Nothing -> s
     in Dict.map resolve grid
+
+calculatePoints : Model -> Model
+calculatePoints model =
+    let grid = model.grid
+        accPoints = \_ {item} points ->
+            let new = 
+                case item of
+                    Just i -> i.value
+                    Nothing -> 0
+            in new + points
+        points = Dict.foldl accPoints 0 grid
+        player = model.player
+        player' = {player|points<-points}
+    in {model|player<-player'}
 
 movePCs : Model -> Model
 movePCs model = 
@@ -179,6 +208,7 @@ step action model = case action of
             player' = {player|position<-bound (y+y', x+x')}
         in {model|player<-player'}
             |> movePCs
+            |> calculatePoints
     Fetch -> swapItems model
     _ -> model
 
@@ -216,14 +246,16 @@ renderSquare y x {item, monster, pc} =
     let form = 
         case pc of
             Just pc' ->
-                pc'.name |> fromString |> text
+                pc'.name ++ ": " ++ (toString pc'.xp) 
+                    |> fromString 
+                    |> text
             Nothing -> 
                 case monster of
                     Just monster' ->
                         monster'.name |> fromString |> text
                     Nothing -> 
                         case item of
-                            Just n -> n |> toString |> fromString |> text
+                            Just n -> n.name |> toString |> fromString |> text
                             Nothing -> outlined (solid red) (square tileSize)
     in form |> move (toPos y x)
 
@@ -233,12 +265,22 @@ renderRow y g = map (\x->get (y,x) g |> withDefault emptySquare |> renderSquare 
 addForm : Form -> List Form -> List Form
 addForm f l = l ++ [f]
 
-render : Model -> Element
-render {grid, player} =
+renderGrid : Model -> Element
+renderGrid {grid, player} =
     map (\y->renderRow y grid) yRange
         |> flatten
         |> addForm (renderPlayer player)
         |> collage (height*tileSize) (width*tileSize)
 
-main : Signal Element
+renderPoints : Model -> Html
+renderPoints model = model.player.points |> toString |> Html.text
+
+render : Model -> Html
+render model =
+    div [] [
+        renderGrid model |> Html.fromElement,
+        renderPoints model
+    ]
+
+main : Signal Html
 main = render <~ state
