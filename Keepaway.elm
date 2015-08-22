@@ -8,9 +8,9 @@ import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, 
 import Graphics.Element exposing (Element)
 import Html exposing (div, Html)
 import Keyboard exposing (arrows, isDown, space)
-import List exposing (filter, foldl, head, length, map, reverse, sort, sortBy)
+import List exposing (drop, filter, foldl, head, length, map, reverse, sort, sortBy)
 import Maybe exposing (andThen, Maybe(..), withDefault)
-import Random exposing (generate, Generator, initialSeed, int, pair, Seed)
+import Random exposing (customGenerator, generate, Generator, initialSeed, int, pair, Seed)
 import Signal exposing ((<~), (~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
 import Text exposing (fromString)
 
@@ -43,56 +43,81 @@ pointGenerator = pair (int 0 (height-1)) (int 0 (width-1))
 hpGenerator = int 1 maxMonsterHp
 valueGenerator = int 1 maxItemValue
 
+classes = [
+        {name="Cleric"},
+        {name="Warlock"},
+        {name="Ranger"},
+        {name="Shaman"},
+        {name="Crusader"},
+        {name="Alchemist"},
+        {name="Ninja"}
+    ]
+
+classNumGenerator = int 0 ((length classes)-1)
+
+classGenerator = customGenerator (\seed ->
+        let (idx,s') = generate classNumGenerator seed
+            class = drop idx classes |> head |> withDefault {name="???"}
+        in (class,s')
+    )
+
 addItem : Maybe Item -> Maybe Square -> Maybe Square
 addItem i ms = case ms of
     Just s -> Just {s|item<-i}
     Nothing -> Nothing
 
-addItems : Model -> Model
-addItems model =
+type alias SpecMaker a = List (Point,a) -> Seed -> (List (Point,a),Seed)
+type alias Inserter a = a -> Maybe Square -> Maybe Square
+
+generateItem : SpecMaker Int
+generateItem list seed =
+    let (p,s') = generate pointGenerator seed
+        (val,s'') = generate valueGenerator s'
+    in ((p,val)::list,s'')
+
+generateMonster : SpecMaker Int
+generateMonster list seed =
+    let (p,s') = generate pointGenerator seed
+        (hp,s'') = generate hpGenerator s'
+    in ((p,hp)::list,s'')
+
+generatePC : SpecMaker Class
+generatePC list seed =
+    let (p,s') = generate pointGenerator seed
+        (class,s'') = generate classGenerator s'
+    in ((p,class)::list,s'')
+
+createItemIn : Inserter Int
+createItemIn value square =
+    case square of
+        Just square' -> Just {square'|item<-Just {name="I", value=value}}
+        Nothing -> Nothing
+
+addMonster : Inserter Int
+addMonster hp s = 
+    case s of
+        Just s' -> Just {s'|monster<-Just {name="M", hp=hp}}
+        Nothing -> Nothing
+
+addPC : Inserter Class
+addPC class s = 
+    case s of
+        Just s' -> Just {s'|pc<-Just {name="PC", class=class, xp=0}}
+        Nothing -> Nothing
+
+addRandom : SpecMaker a -> Inserter a -> Int -> Model -> Model
+addRandom genFn addFn howMany model =
     let grid = model.grid
         seed = model.seed
-        generateItem _ (l,s) =
-            let (p,s') = generate pointGenerator s
-                (val,s'') = generate valueGenerator s'
-            in ((p,val)::l,s'')
-        (items, s') = foldl generateItem ([], seed) [0..numberOfItems]
-        addItem value square =
-            case square of
-                Just square' -> Just {square'|item<-Just {name="I", value=value}}
-                Nothing -> Nothing
-        grid' = foldl (\(p,value) g' -> update p (addItem value) g') grid items
+        (specs,s') = foldl (\_ (l,s) -> genFn l s) ([], seed) [0..howMany]
+        grid' = foldl (\(p,a) g' -> update p (addFn a) g') grid specs
     in {model|
-        grid<-grid',
-        seed<-s'}
+            grid<-grid',
+            seed<-s'}
 
-addPCs : Model -> Model
-addPCs model =
-    let grid = model.grid
-        grid' = update (7,7)
-            (\s->case s of
-                    Just s' -> Just {s'|pc<-Just {name="F", xp=0}}
-                    Nothing -> Nothing) grid
-    in {model|grid<-grid'}
-
-addMonsters : Model -> Model
-addMonsters model =
-    -- TODO dedupe this with addItems
-    let grid = model.grid
-        seed = model.seed
-        generateMonster _ (l,s) =
-            let (p,s') = generate pointGenerator s
-                (hp,s'') = generate hpGenerator s'
-            in ((p,hp)::l,s'')
-        (monsters, s') = foldl generateMonster ([], initialSeed 0) [0..numberOfMonsters]
-        addMonster hp s = 
-            case s of
-                Just s' -> Just {s'|monster<-Just {name="M", hp=hp}}
-                Nothing -> Nothing
-        grid' = foldl (\(p,hp) g'-> update p (addMonster hp) g') grid monsters
-    in {model|
-        grid<-grid',
-        seed<-s'}
+addItems = addRandom generateItem createItemIn numberOfItems
+addMonsters = addRandom generateMonster addMonster numberOfMonsters
+addPCs = addRandom generatePC addPC 2
 
 init : (a,Seed) -> Model
 init (_,s) = {
@@ -106,8 +131,8 @@ init (_,s) = {
         grid=foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g xRange) empty yRange
     } 
         |> addItems
-        |> addPCs
         |> addMonsters
+        |> addPCs
         -- who knows? pc could be standing on an item
         |> resolveCollisions
         |> calculatePoints

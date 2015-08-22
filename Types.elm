@@ -11,7 +11,8 @@ type Action = Idle|Fetch|Move Dir|Restart
 
 type alias Item = {name:String, value:Int}
 type alias Monster = {name:String, hp:Int}
-type alias PC = {name:String, xp:Int}
+type alias Class = {name:String}
+type alias PC = {name:String, xp:Int, class:Class}
 
 type alias Square = {
         item: Maybe Item,
