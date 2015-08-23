@@ -136,15 +136,10 @@ calculatePoints : Model -> Model
 calculatePoints model =
     let grid = model.grid
         accPoints = \{item} points ->
-            let new = 
-                case item of
-                    Just i -> i.value
-                    Nothing -> 0
+            let new = Maybe.map (.value) item |> withDefault 0
             in new + points
         points = grid |> values |> foldl accPoints 0
-        points' = points + (case player.carrying of
-                                Just i -> i.value
-                                Nothing -> 0)
+        points' = points + (Maybe.map (.value) player.carrying |> withDefault 0)
         player = model.player
         player' = {player|points<-points'}
     in {model|player<-player'}
@@ -196,27 +191,20 @@ getMonstersNextTo grid p =
     in grid
         |> toList
         |> filterMap (\(p,{monster}) -> 
-            case monster of
-                Just m -> 
-                    if member p neighbors then Just (p,m) else Nothing
-                Nothing -> Nothing)
+            cond (member p neighbors) (Maybe.map ((,) p) monster) Nothing)
 
 -- TODO dedupe with filterSquares
 getWith : Grid -> (Square->Maybe a) -> List (Point,a)
 getWith grid fn =
     grid
         |> toList
-        |> filterMap (\(p,s) -> case fn s of
-                Just i -> Just (p,i)
-                Nothing -> Nothing)
+        |> filterMap (\(p,s) -> fn s |> Maybe.map ((,) p))
 
 filterSquares : Grid -> (Square->Maybe a) -> List (Point,Square)
 filterSquares grid fn =
     grid
         |> toList
-        |> filter (\(p,s) -> case fn s of
-                Just i -> True
-                Nothing -> False)
+        |> filter (\(p,s) -> fn s /= Nothing)
 
 processAOOs : Model -> Model
 processAOOs model =
@@ -224,34 +212,26 @@ processAOOs model =
         pcPoints = getWith grid (.pc) |> map fst
         triggerAOOsOn : Point -> PC -> Grid
         triggerAOOsOn p pc =
-            let monsters = getMonstersNextTo grid p |> log "wtf"
+            let monsters = getMonstersNextTo grid p
+                processMonster : (Point,Monster) -> Grid
+                processMonster (_,m) =
+                    if m.currentCooldown == 0 then
+                        let statuses' = pc.statuses ++ [Stun 12]
+                            pc' = {pc|statuses<-statuses'}
+                            monster' = {m|currentCooldown<-m.cooldown}
+                        in grid
+                            |> update p (Maybe.map (\s -> {s|pc<-Just pc'}))
+                            |> update p (Maybe.map (\s -> {s|monster<-Just monster'}))
+                    else grid
             in
-                case head monsters of
-                    Just (mP,m) ->
-                        if m.currentCooldown == 0 then
-                            let statuses' = pc.statuses ++ [Stun 12]
-                                pc' = {pc|statuses<-statuses'}
-                                monster' = {m|currentCooldown<-m.cooldown}
-                            in grid
-                                |> update p (\s -> case s of
-                                    Just s' -> Just {s'|pc<-Just pc'}
-                                    Nothing -> Nothing)
-                                |> update mP (\s -> case s of
-                                    Just s' -> Just {s'|monster<-Just monster'}
-                                    Nothing -> Nothing)
-                        else
-                            grid
-                    Nothing -> grid
+                head monsters
+                    |> Maybe.map processMonster
+                    |> withDefault grid
         triggerAOOs : Point -> Grid -> Grid
         triggerAOOs p grid =
-            let s = get p grid
-            in
-                case s of
-                    Just s' -> 
-                        case s'.pc of
-                            Just pc -> triggerAOOsOn p pc
-                            Nothing -> grid
-                    Nothing -> grid
+            get p grid `andThen` (.pc)
+                |> Maybe.map (triggerAOOsOn p)
+                |> withDefault grid
         grid' = foldl triggerAOOs grid pcPoints
     in {model|grid<-grid'}
 
@@ -261,12 +241,12 @@ tickCooldowns model =
         monsterPoints = filterSquares grid (.monster)
         cooldownAt : (Point,Square) -> (Point,Square)
         cooldownAt (point, square) =
-            case square.monster of
-                Just monster ->
-                    let cc' = max 0 (monster.currentCooldown-1)
-                        m' = {monster|currentCooldown<-cc'}
-                    in (point, {square|monster<-Just m'})
-                Nothing -> (point, square)
+            square.monster
+                |> Maybe.map (\monster ->
+                        let cc' = max 0 (monster.currentCooldown-1)
+                            m' = {monster|currentCooldown<-cc'}
+                        in (point, {square|monster<-Just m'}))
+                |> withDefault (point, square)
         grid' = map cooldownAt monsterPoints
             |> foldl (uncurry insert) grid
     in {model|grid<-grid'}
