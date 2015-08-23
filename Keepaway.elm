@@ -6,7 +6,7 @@ import Dict exposing (Dict, empty, get, insert, keys, toList, update, values)
 import Html exposing (Html)
 import Keyboard exposing (arrows, isDown, space)
 import List exposing (drop, filter, filterMap, foldl, head, isEmpty, length, map, member, reverse)
-import Maybe exposing (Maybe(..), withDefault)
+import Maybe exposing (andThen, Maybe(..), withDefault)
 import Random exposing (Seed)
 import Signal exposing ((<~), (~), foldp, Mailbox, mailbox, mergeMany)
 
@@ -58,9 +58,7 @@ dirToPoint d =
         _ -> (0,0)
 
 addItem : Maybe Item -> Maybe Square -> Maybe Square
-addItem i ms = case ms of
-    Just s -> Just {s|item<-i}
-    Nothing -> Nothing
+addItem i ms = Maybe.map (\s->{s|item<-i}) ms
 
 swapItems : Model -> Model
 swapItems model =
@@ -68,9 +66,7 @@ swapItems model =
         grid = model.grid
         position = player.position
         carrying = player.carrying
-        item = case get position grid of
-            Just {item} -> item
-            Nothing -> Nothing
+        item = get position grid `andThen` (.item)
         player' = {player|carrying<-item}
         grid' = update position (addItem carrying) grid
     in {
@@ -78,11 +74,6 @@ swapItems model =
             player<-player',
             grid<-grid'
     }
-
-m : (a->b) -> Maybe a -> Maybe b
-m fn a = case a of
-    Just i -> Just (fn i)
-    Nothing -> Nothing
 
 setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc}
@@ -101,16 +92,14 @@ movePCFrom' (y,x) pc grid =
             let current = get (y,x) grid |> withDefault emptySquare
                 stuck = current.monster /= Nothing
                 dest = pickDir grid (y,x) |> cond stuck (y,x)
-                grid' = update (y,x) (m (setPC Nothing)) grid
-            in update dest (m (setPC (Just pc))) grid'
+                grid' = update (y,x) (Maybe.map (setPC Nothing)) grid
+            in update dest (Maybe.map (setPC (Just pc))) grid'
 
 movePCFrom : Point -> Grid -> Grid
-movePCFrom p grid =
-    let pc = get p grid |> withDefault emptySquare |> (.pc)
-    in 
-        case pc of
-            Just pc' -> movePCFrom' p pc' grid
-            Nothing -> grid
+movePCFrom point grid =
+    get point grid `andThen` (.pc)
+        |> Maybe.map (\pc -> movePCFrom' point pc grid)
+        |> withDefault grid
 
 damage : Monster -> Maybe Monster
 damage monster =
@@ -120,32 +109,27 @@ damage monster =
         (Just {monster|hp<-hp'})
         Nothing
 
-unjust : Maybe (Maybe a) -> Maybe a
-unjust m = case m of
-    Just m' -> m'
-    Nothing -> Nothing
+resolve : Point -> Square -> Square
+resolve _ square =
+    let resolve' : PC -> Square
+        resolve' pc = 
+            let monster' = square.monster `andThen` damage
+                getXp = square.item /= Nothing || (square.monster /= Nothing && monster' == Nothing)
+                value : Int
+                value = Maybe.map (.value) square.item |> withDefault 0
+                xp' = pc.xp + (cond getXp value 0)
+                pc' = {pc|xp<-xp'}
+            in {square|
+                    item<-Nothing,
+                    monster<-monster',
+                    pc<-Just pc'
+                }
+    in Maybe.map resolve' square.pc 
+        |> withDefault square
 
 resolveCollisions : Model -> Model
 resolveCollisions model =
     let grid = model.grid
-        resolve = \(y,x) s ->
-            case s.pc of
-                Just pc ->
-                    -- TODO having to unwrap a double Maybe seems wrong
-                    let monster' = m damage s.monster |> unjust
-                    -- TODO seems redundant to check item existence twice
-                        getXp = s.item /= Nothing || (s.monster /= Nothing && monster' == Nothing)
-                        value = case s.item of
-                            Just i -> i.value
-                            Nothing -> 0
-                        xp' = pc.xp + (cond getXp value 0)
-                        pc' = {pc|xp<-xp'}
-                    in {s|
-                        item<-Nothing, 
-                        monster<-monster',
-                        pc<-Just pc'
-                    }
-                Nothing -> s
     in {model|grid<-Dict.map resolve grid}
 
 calculatePoints : Model -> Model

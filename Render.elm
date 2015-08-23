@@ -47,10 +47,7 @@ renderSquare y x {item, monster, pc} =
             Nothing -> 
                 case monster of
                     Just monster' -> getImage "Goblin" |> Just
-                    Nothing -> 
-                        case item of
-                            Just n -> getImage "Gold" |> Just
-                            Nothing -> Nothing
+                    Nothing -> Maybe.map (\item -> getImage "Gold") item
         grp = case form of
             Just f -> group [ground,f]
             Nothing -> ground

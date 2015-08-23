@@ -34,46 +34,37 @@ classGenerator = customGenerator (\seed ->
 type alias SpecMaker a = List (Point,a) -> Seed -> (List (Point,a),Seed)
 type alias Inserter a = a -> Maybe Square -> Maybe Square
 
-generateItem : SpecMaker Int
-generateItem list seed =
+generateWith : Generator a -> SpecMaker a
+generateWith gen list seed =
     let (p,s') = generate pointGenerator seed
-        (val,s'') = generate valueGenerator s'
-    in ((p,val)::list,s'')
+        (v,s'') = generate gen s'
+    in  ((p,v)::list,s'')
+
+generateItem : SpecMaker Int
+generateItem = generateWith valueGenerator
 
 generateMonster : SpecMaker Int
-generateMonster list seed =
-    let (p,s') = generate pointGenerator seed
-        (hp,s'') = generate hpGenerator s'
-    in ((p,hp)::list,s'')
+generateMonster = generateWith hpGenerator
 
 generatePC : SpecMaker Class
-generatePC list seed =
-    let (p,s') = generate pointGenerator seed
-        (class,s'') = generate classGenerator s'
-    in ((p,class)::list,s'')
+generatePC = generateWith classGenerator
 
-createItemIn : Inserter Int
-createItemIn value square =
-    case square of
-        Just square' -> Just {square'|item<-Just {name="I", value=value}}
-        Nothing -> Nothing
+inserter : (a -> Square -> Square) -> Inserter a
+inserter inserter value square = Maybe.map (\s->inserter value s) square
+
+addItem : Inserter Int
+addItem = inserter (\value square -> {square|item<-Just {name="I", value=value}})
 
 addMonster : Inserter Int
-addMonster hp s = 
-    case s of
-        Just s' -> Just {s'|monster<-Just {name="M", hp=hp, cooldown=2, currentCooldown=0}}
-        Nothing -> Nothing
+addMonster = inserter (\hp square -> {square|monster<-Just {name="M", hp=hp, cooldown=2, currentCooldown=0}})
 
 addPC : Inserter Class
-addPC class s = 
-    case s of
-        Just s' -> Just {s'|pc<-Just {
-            name="PC", 
-            class=class, 
+addPC = inserter (\class square -> {square|pc<-Just {
+            name="PC",
+            class=class,
             statuses=[],
             xp=0}
-        }
-        Nothing -> Nothing
+        })
 
 addRandom : SpecMaker a -> Inserter a -> Int -> Model -> Model
 addRandom genFn addFn howMany model =
@@ -85,6 +76,6 @@ addRandom genFn addFn howMany model =
             grid<-grid',
             seed<-s'}
 
-addItems = addRandom generateItem createItemIn numberOfItems
+addItems = addRandom generateItem addItem numberOfItems
 addMonsters = addRandom generateMonster addMonster numberOfMonsters
 addPCs = addRandom generatePC addPC 2
