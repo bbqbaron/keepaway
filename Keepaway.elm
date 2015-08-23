@@ -8,7 +8,7 @@ import Keyboard exposing (arrows, isDown, space)
 import List exposing (drop, filter, filterMap, foldl, head, length, map, member, reverse)
 import Maybe exposing (andThen, Maybe(..), withDefault)
 import Random exposing (Seed)
-import Signal exposing ((<~), (~), foldp, Mailbox, mailbox, mergeMany)
+import Signal exposing ((<~), (~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
 
 import Signal.Extra exposing (foldp')
 
@@ -24,7 +24,7 @@ updates : Mailbox Action
 updates = mailbox Idle
 
 port playSound : Signal String
-port playSound = Signal.dropRepeats ((.soundToPlay) <~ state)
+port playSound = (.soundToPlay) <~ state
 
 init : (a,Seed) -> Model
 init (_,s) = {
@@ -52,15 +52,16 @@ start model =
 
 step : (Action, Seed) -> Model -> Model
 step (action, _) model = 
-    let model' = 
+    let silentModel = {model|soundToPlay <- ""}
+        actionedModel = 
         case action of
             Move dir -> 
-                let player = model.player
+                let player = silentModel.player
                     (y,x) = player.position
                     (y',x') = dirToPoint dir
                     player' = {player|position<-bound (y+y', x+x')}
-                    model' = tick model
-                in {model'|player<-player'}
+                    tickedModel = tick silentModel
+                in {tickedModel|player<-player'}
                     |> movePCs
                     |> resolveCollisions
                     |> processAOOs
@@ -68,11 +69,11 @@ step (action, _) model =
                     |> calculatePoints
                     |> squashPlayer
                     |> maybeEndGame
-            Fetch -> swapItems model
+            Fetch -> swapItems silentModel
             Restart ->
-                cond (model.player.alive) model (init ((), model.seed) |> start)
-            _ -> model
-    in model'
+                cond (silentModel.player.alive) silentModel (init ((), silentModel.seed) |> start)
+            _ -> silentModel
+    in actionedModel
 
 onRelease : Action -> Signal Bool -> Signal Action
 onRelease a k =

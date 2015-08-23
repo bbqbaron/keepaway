@@ -45,7 +45,7 @@ swapItems model =
         model|
             player<-player',
             grid<-grid',
-            soundToPlay<-"coin"
+            soundToPlay<-cond (player.carrying /= Nothing) "drop" "coin"
     }
 
 stunned : PC -> Bool
