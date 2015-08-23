@@ -57,7 +57,7 @@ addItem : Inserter Int
 addItem = inserter (\value square -> {square|item<-Just {name="I", value=value}})
 
 addMonster : Inserter Int
-addMonster = inserter (\hp square -> {square|monster<-Just {name="M", hp=hp, cooldown=4, currentCooldown=0}})
+addMonster = inserter (\hp square -> {square|monster<-Just {name="M", maxHP=hp, currentHP=hp, cooldown=4, currentCooldown=0}})
 
 addPC : Inserter Class
 addPC = inserter (\class square -> {square|pcs<-{

@@ -81,10 +81,10 @@ movePCs model =
 
 damageMonster : Monster -> Maybe Monster
 damageMonster monster =
-    let hp' = monster.hp - 1
+    let hp' = monster.currentHP - 1
     in cond 
         (hp'>0) 
-        (Just {monster|hp<-hp'})
+        (Just {monster|currentHP<-hp'})
         Nothing
 
 resolveCollisionAt : Point -> Square -> Square

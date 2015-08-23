@@ -15,7 +15,8 @@ type alias Monster = {
         cooldown:Int,
         currentCooldown:Int,
         name:String, 
-        hp:Int
+        maxHP: Int,
+        currentHP: Int
     }
 
 type Ability = Tough

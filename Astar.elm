@@ -15,7 +15,7 @@ prioritize grid p =
             get p grid
                 |> Maybe.map (\{item, monster, pcs} -> 
                     withDefault 0 (Maybe.map (.value) item)
-                    + withDefault 0 (Maybe.map ((.hp) >> (*) -1) monster)
+                    + withDefault 0 (Maybe.map ((.currentHP) >> (*) -1) monster)
                 )
                 |> withDefault 0
     in (priority, p)

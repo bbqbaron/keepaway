@@ -62,12 +62,13 @@ renderHP currentHP maxHP =
             |> filled red
         current = rect (tileSize * (toFloat currentHP)/(toFloat maxHP)) (tileSize/5)
             |> filled green
+            |> moveX ((tileSize - (tileSize * (toFloat currentHP)/(toFloat maxHP))) * -1)
     in group [max, current]
             |> moveY (tileSize * -0.3)
 
 renderMonster : Monster -> Form
 renderMonster monster =
-    let base = [getImage "Goblin", monster.hp |> toString |> fromString |> text |> moveX -20]
+    let base = [getImage "Goblin", renderHP monster.currentHP monster.maxHP]
         cooldown = monster.currentCooldown
     in cond
         (cooldown > 0)
@@ -80,15 +81,16 @@ renderItem {value} =group [getImage "Gold", value |> toString |> fromString |> t
 
 renderSquare : Int -> Int -> Square -> Form
 renderSquare y x {item, monster, pcs} = 
-    let ground = getImage "Ground"
-        grp = oneOf [
-                (head pcs |> Maybe.map renderPC),
-                (monster |> Maybe.map renderMonster),
-                (item |> Maybe.map renderItem)
-            ]
-            |> Maybe.map ((flip (::) [ground])>>reverse>>group)
-            |> withDefault ground
-    in grp |> move (toPos y x)
+    let base = [getImage "Ground"] ++ map renderPC pcs
+        base' = 
+            Maybe.map renderMonster monster
+                |> Maybe.map (\r -> base ++ [r])
+                |> withDefault base
+        base'' = 
+            Maybe.map renderItem item
+                |> Maybe.map (\r -> base' ++ [r])
+                |> withDefault base'
+    in base'' |> group |> move (toPos y x)
 
 renderRow : Int -> Grid -> List Form
 renderRow y g = map (\x->get (y,x) g |> withDefault emptySquare |> renderSquare y x) xRange
