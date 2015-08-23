@@ -3,12 +3,12 @@ module Keepaway where
 import Char exposing (toCode)
 import Color exposing (green, red)
 import Debug exposing (log)
-import Dict exposing (Dict, empty, get, insert, keys, update)
+import Dict exposing (Dict, empty, get, insert, keys, toList, update, values)
 import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, solid, square, text, toForm)
 import Graphics.Element exposing (Element, image)
 import Html exposing (div, Html)
 import Keyboard exposing (arrows, isDown, space)
-import List exposing (drop, filter, foldl, head, length, map, reverse, sort, sortBy)
+import List exposing (drop, filter, filterMap, foldl, head, isEmpty, length, map, member, reverse, sort, sortBy)
 import Maybe exposing (andThen, Maybe(..), withDefault)
 import Random exposing (customGenerator, generate, Generator, initialSeed, int, pair, Seed)
 import Signal exposing ((<~), (~), dropRepeats, foldp, Mailbox, mailbox, mergeMany)
@@ -20,7 +20,7 @@ import Signal.Time exposing (startTime)
 import Astar exposing (movePoint, pickDir, prioritize)
 import Const exposing (..)
 import Types exposing (..)
-import Util exposing (bound, cond, origin)
+import Util exposing (bound, cond, inBounds, origin)
 
 updates : Mailbox Action
 updates = mailbox Idle
@@ -75,13 +75,18 @@ createItemIn value square =
 addMonster : Inserter Int
 addMonster hp s = 
     case s of
-        Just s' -> Just {s'|monster<-Just {name="M", hp=hp}}
+        Just s' -> Just {s'|monster<-Just {name="M", hp=hp, cooldown=2, currentCooldown=0}}
         Nothing -> Nothing
 
 addPC : Inserter Class
 addPC class s = 
     case s of
-        Just s' -> Just {s'|pc<-Just {name="PC", class=class, xp=0}}
+        Just s' -> Just {s'|pc<-Just {
+            name="PC", 
+            class=class, 
+            statuses=[],
+            xp=0}
+        }
         Nothing -> Nothing
 
 addRandom : SpecMaker a -> Inserter a -> Int -> Model -> Model
@@ -158,15 +163,30 @@ m fn a = case a of
 setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc}
 
+isStun a = case a of
+    Stun n -> True
+    _ -> False
+
+movePCFrom' : Point -> PC -> Grid -> Grid
+movePCFrom' (y,x) pc grid =
+    let stunned = filter isStun pc.statuses |> isEmpty |> not
+    in 
+        if stunned then
+            grid
+        else
+            let current = get (y,x) grid |> withDefault emptySquare
+                stuck = current.monster /= Nothing
+                dest = pickDir grid (y,x) |> cond stuck (y,x)
+                grid' = update (y,x) (m (setPC Nothing)) grid
+            in update dest (m (setPC (Just pc))) grid'
+
 movePCFrom : Point -> Grid -> Grid
-movePCFrom (y,x) grid =
-    let current = get (y,x) grid |> withDefault emptySquare
-        stuck = current.monster /= Nothing
-        dest = pickDir grid (y,x) |> cond stuck (y,x)
-        pc = get (y,x) grid |> withDefault emptySquare |> (.pc)
-        grid' = update (y,x) (m (setPC Nothing)) grid
-        grid'' = update dest (m (setPC pc)) grid'
-    in grid''
+movePCFrom p grid =
+    let pc = get p grid |> withDefault emptySquare |> (.pc)
+    in 
+        case pc of
+            Just pc' -> movePCFrom' p pc' grid
+            Nothing -> grid
 
 damage : Monster -> Maybe Monster
 damage monster =
@@ -207,15 +227,18 @@ resolveCollisions model =
 calculatePoints : Model -> Model
 calculatePoints model =
     let grid = model.grid
-        accPoints = \_ {item} points ->
+        accPoints = \{item} points ->
             let new = 
                 case item of
                     Just i -> i.value
                     Nothing -> 0
             in new + points
-        points = Dict.foldl accPoints 0 grid
+        points = grid |> values |> foldl accPoints 0
+        points' = points + (case player.carrying of
+                                Just i -> i.value
+                                Nothing -> 0)
         player = model.player
-        player' = {player|points<-points}
+        player' = {player|points<-points'}
     in {model|player<-player'}
 
 movePCs : Model -> Model
@@ -224,6 +247,26 @@ movePCs model =
         pcs = Dict.filter (\_ {pc} -> pc /= Nothing) grid |> keys
         grid' = foldl movePCFrom grid pcs
     in {model|grid<-grid'} |> resolveCollisions
+
+tick : Model -> Model
+tick model =
+    let grid = model.grid
+        decStun stun = case stun of
+            Stun n ->
+                if | n > 1 -> (n-1) |> Stun |> Just
+                   | otherwise -> Nothing
+            _ -> Nothing
+        tickStun : PC -> PC
+        tickStun pc =
+            let stuns = filter isStun pc.statuses
+                stuns' = filterMap decStun stuns
+                nonstuns = filter (isStun>>not) pc.statuses
+            in {pc|statuses<-nonstuns++stuns'}
+        tick p s = case s.pc of
+            Just pc -> {s|pc<-tickStun pc |> Just}
+            Nothing -> s
+        grid' = Dict.map tick grid
+    in {model|grid<-grid'}
 
 squashPlayer : Model -> Model
 squashPlayer model =
@@ -234,6 +277,49 @@ squashPlayer model =
         player' = cond hasPC {player|points<-0} player
     in {model|player<-player'}
 
+getNeighbors : Point -> List Point
+getNeighbors (y,x) =
+    let dirs = [(-1,0),(-1,-1),(-1,1),(0,1),(0,-1),(1,1),(1,0),(1,-1)]
+    in map (\(y',x')->(y+y',x+x')) dirs
+
+getMonstersNextTo : Grid -> Point -> List (Point,Monster)
+getMonstersNextTo grid p =
+    let neighbors = getNeighbors p |> filter inBounds
+    in grid
+        |> toList
+        |> filterMap (\(p,{monster}) -> case monster of
+                Just m -> Just (p,m)
+                Nothing -> Nothing)
+
+processAOOs : Model -> Model
+processAOOs model =
+    let grid = model.grid
+        triggerAOOsOn : Point -> PC -> Grid
+        triggerAOOsOn p pc =
+            let monsters = getMonstersNextTo grid p
+            in
+                case head monsters of
+                    Just (mP,m) ->
+                        let statuses' = pc.statuses ++ [Stun 2]
+                            pc' = {pc|statuses<-statuses'}
+                            monster' = {m|currentCooldown<-m.cooldown}
+                        in grid
+                            |> update p (\s -> case s of
+                                Just s' -> Just {s'|pc<-Just pc'}
+                                Nothing -> Nothing)
+                            |> update mP (\s -> case s of
+                                Just s' -> Just {s'|monster<-Just monster'}
+                                Nothing -> Nothing)
+                    Nothing -> grid
+        triggerAOOs : Point -> Square -> Square
+        triggerAOOs p s =
+            case s.pc of
+                Just pc -> {s|pc<-triggerAOOsOn p pc |> Just}
+                Nothing -> s
+        -- TODO I think this is now a fold over points containing PCs?
+        grid' = Dict.map triggerAOOs grid
+    in {model|grid<-grid'}
+
 step : (Action, Seed) -> Model -> Model
 step (action, _) model = 
     let model' = 
@@ -243,8 +329,10 @@ step (action, _) model =
                     (y,x) = player.position
                     (y',x') = dirToPoint dir
                     player' = {player|position<-bound (y+y', x+x')}
-                in {model|player<-player'}
+                    model' = tick model
+                in {model'|player<-player'}
                     |> movePCs
+                    |> processAOOs
             Fetch -> swapItems model
             Restart -> cond (model.player.points<=0) (init ((), model.seed)) model
             _ -> model
@@ -284,7 +372,7 @@ toPos y x =
 renderPlayer : Player -> Form
 renderPlayer {carrying, position} = 
     let (y,x) = position
-        base = filled green (square tileSize)
+        base = getImage "Imp"
         withText = case carrying of
                 Just i -> group [base, i |> toString |> fromString |> text]
                 Nothing -> base

@@ -10,9 +10,24 @@ type alias Point = (Int,Int)
 type Action = Idle|Fetch|Move Dir|Restart
 
 type alias Item = {name:String, value:Int}
-type alias Monster = {name:String, hp:Int}
+
+type alias Monster = {
+        cooldown:Int,
+        currentCooldown:Int,
+        name:String, 
+        hp:Int
+    }
+
 type alias Class = {name:String}
-type alias PC = {name:String, xp:Int, class:Class}
+
+type Status = Stun Int
+
+type alias PC = {
+        class:Class,
+        name:String,
+        statuses:List Status,
+        xp:Int
+    }
 
 type alias Square = {
         item: Maybe Item,
