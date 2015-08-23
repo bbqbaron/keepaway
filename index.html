@@ -15,7 +15,11 @@
         	audioElements = {},
         	i,
         	coin,
-        	fileName;
+        	fileName,
+            music = new Audio(nameToFileName('recording'));
+
+        music.loop = true;
+        music.play();
 
         for (i=0; i<soundFiles.length; i++) {
         	fileName = nameToFileName(soundFiles[i]);
