@@ -26,7 +26,7 @@ updates = mailbox Idle
 init : (a,Seed) -> Model
 init (_,s) = {
         player={
-                alive=True,
+                alive=False,
                 carrying=Nothing,
                 points=0,
                 position=(0,0)
@@ -39,6 +39,12 @@ init (_,s) = {
         |> addPCs
         -- who knows? pc could be standing on an item
         |> resolveCollisions
+
+start : Model -> Model
+start model =
+    let player = model.player
+        player' = {player|alive<-True}
+    in {model|player<-player'}
 
 step : (Action, Seed) -> Model -> Model
 step (action, _) model = 
@@ -58,7 +64,8 @@ step (action, _) model =
                     |> squashPlayer
                     |> maybeEndGame
             Fetch -> swapItems model
-            Restart -> cond (model.player.alive) model (init ((), model.seed))
+            Restart ->
+                cond (model.player.alive) model ((init ((), model.seed)) |> start)
             _ -> model
     in model'
 
