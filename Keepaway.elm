@@ -287,38 +287,61 @@ getMonstersNextTo grid p =
     let neighbors = getNeighbors p |> filter inBounds
     in grid
         |> toList
-        |> filterMap (\(p,{monster}) -> case monster of
-                Just m -> Just (p,m)
+        |> filterMap (\(p,{monster}) -> 
+            case monster of
+                Just m -> 
+                    if member p neighbors then Just (p,m) else Nothing
+                Nothing -> Nothing)
+
+getWith : Grid -> (Square->Maybe a) -> List (Point,a)
+getWith grid fn =
+    grid
+        |> toList
+        |> filterMap (\(p,s) -> case fn s of
+                Just i -> Just (p,i)
                 Nothing -> Nothing)
 
 processAOOs : Model -> Model
 processAOOs model =
     let grid = model.grid
+        pcPoints = getWith grid (.pc) |> map fst
         triggerAOOsOn : Point -> PC -> Grid
         triggerAOOsOn p pc =
-            let monsters = getMonstersNextTo grid p
+            let monsters = getMonstersNextTo grid p |> log "wtf"
             in
                 case head monsters of
                     Just (mP,m) ->
-                        let statuses' = pc.statuses ++ [Stun 2]
-                            pc' = {pc|statuses<-statuses'}
-                            monster' = {m|currentCooldown<-m.cooldown}
-                        in grid
-                            |> update p (\s -> case s of
-                                Just s' -> Just {s'|pc<-Just pc'}
-                                Nothing -> Nothing)
-                            |> update mP (\s -> case s of
-                                Just s' -> Just {s'|monster<-Just monster'}
-                                Nothing -> Nothing)
+                        if m.currentCooldown == 0 then
+                            let statuses' = pc.statuses ++ [Stun 12]
+                                pc' = {pc|statuses<-statuses'}
+                                monster' = {m|currentCooldown<-m.cooldown}
+                            in grid
+                                |> update p (\s -> case s of
+                                    Just s' -> Just {s'|pc<-Just pc'}
+                                    Nothing -> Nothing)
+                                |> update mP (\s -> case s of
+                                    Just s' -> Just {s'|monster<-Just monster'}
+                                    Nothing -> Nothing)
+                        else
+                            grid
                     Nothing -> grid
-        triggerAOOs : Point -> Square -> Square
-        triggerAOOs p s =
-            case s.pc of
-                Just pc -> {s|pc<-triggerAOOsOn p pc |> Just}
-                Nothing -> s
-        -- TODO I think this is now a fold over points containing PCs?
-        grid' = Dict.map triggerAOOs grid
+        triggerAOOs : Grid -> Point -> Grid
+        triggerAOOs grid p =
+            let s = get p grid
+            in
+                case s of
+                    Just s' -> 
+                        case s'.pc of
+                            Just pc -> triggerAOOsOn p pc
+                            Nothing -> grid
+                    Nothing -> grid
+        grid' = foldl (\p g' -> triggerAOOs g' p) grid pcPoints
     in {model|grid<-grid'}
+
+--cooldowns : Model -> Model
+--cooldowns model =
+--    let grid = model.grid
+--        monsterPoints = getBy grid (.monster)
 
 step : (Action, Seed) -> Model -> Model
 step (action, _) model = 
