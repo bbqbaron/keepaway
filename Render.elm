@@ -15,6 +15,7 @@ import Maybe exposing (andThen, oneOf, withDefault)
 import Text exposing (fromString)
 
 import Html exposing (div, Html, p)
+import Html.Attributes exposing (style)
 
 import Const exposing (..)
 import Types exposing (..)
@@ -128,15 +129,19 @@ renderRules =
         "The game ends when no gold remains on the field.",
         "Press R to begin."
     ]
-    |> map (Html.text>>flip (::) []>>p [])
+    |> map (\t->Html.span [style [("color", "white")]] [Html.text t])
+    |> map (\s->Html.p [] [s])
     |> div []
 
 render : Model -> Html
 render model =
-    if model.player.alive then
+    (if model.player.alive then
         div [] [
             renderGrid model |> Html.fromElement,
             renderPoints model
         ]
     else
-        renderRules
+        renderRules)
+    |> flip (::) []
+    -- lol
+    |> div [style [("background-color","black"), ("height","10000000px")]]
