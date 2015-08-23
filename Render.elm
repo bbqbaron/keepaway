@@ -7,7 +7,7 @@ each Square a "widget", but the data's awfully intertwined, by necessity.
 -}
 
 import Dict exposing (get)
-import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, solid, square, text, toForm)
+import Graphics.Collage exposing (collage, filled, Form, group, move, moveX, outlined, solid, square, text, toForm)
 import Graphics.Element exposing (Element, image)
 import List exposing (filter, head, map, reverse, sortBy)
 import Maybe exposing (andThen, oneOf, withDefault)
@@ -57,12 +57,13 @@ renderPC pc =
 
 renderMonster : Monster -> Form
 renderMonster monster =
-    let base = getImage "Goblin"
+    let base = [getImage "Goblin", monster.hp |> toString |> fromString |> text |> moveX -20]
         cooldown = monster.currentCooldown
     in cond
         (cooldown > 0)
-        (group [base, cooldown |> toString |> fromString |> text])
+        (base ++ [cooldown |> toString |> fromString |> text])
         base
+        |> group
 
 renderItem : Item -> Form
 renderItem {value} =group [getImage "Gold", value |> toString |> fromString |> text]

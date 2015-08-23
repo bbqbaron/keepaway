@@ -18,7 +18,7 @@ import Generators exposing (..)
 import Grid exposing (..)
 import Render exposing (render)
 import Types exposing (..)
-import Util exposing (bound, cond, inBounds, isStun)
+import Util exposing (bound, cond, inBounds)
 
 updates : Mailbox Action
 updates = mailbox Idle

@@ -12,16 +12,16 @@ import Util exposing (bound, cond)
 prioritize : Grid -> Point -> (Int, Point)
 prioritize grid p =
     let priority = 
-        case get p grid of
-            Just {item, monster} -> 
-                case item of
-                    Just i' -> i'.value
-                    Nothing -> 0
-                +
-                case monster of
-                    Just m' -> -m'.hp
-                    Nothing -> 0
-            Nothing -> 0
+            get p grid
+                -- TODO it's fine to drop priority,
+                -- but since PCs cannot actually stack,
+                -- this is a bug waiting to happen
+                |> Maybe.map (\{item, monster, pc} -> 
+                    withDefault 0 (Maybe.map (.value) item)
+                    + withDefault 0 (Maybe.map ((.hp) >> (*) -1) monster)
+                    + withDefault 0 (Maybe.map (\_ -> -1000) pc)
+                )
+                |> withDefault 0
     in (priority, p)
 
 movePoint : Point -> Point -> Point

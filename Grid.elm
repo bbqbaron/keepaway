@@ -50,23 +50,23 @@ swapItems model =
 setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc}
 
-movePCFrom' : Point -> PC -> Grid -> Grid
-movePCFrom' (y,x) pc grid =
-    let stunned = filter isStun pc.statuses |> isEmpty |> not
-    in 
-        if stunned then
-            grid
-        else
-            let current = get (y,x) grid |> withDefault emptySquare
-                stuck = current.monster /= Nothing
-                dest = pickDir grid (y,x) |> cond stuck (y,x)
-                grid' = update (y,x) (Maybe.map (setPC Nothing)) grid
-            in update dest (Maybe.map (setPC (Just pc))) grid'
+stunned : PC -> Bool
+stunned {statuses} = filter isStun statuses |> isEmpty |> not
+
+movePCFrom' : Point -> Grid -> PC -> Grid
+movePCFrom' (y,x) grid pc =
+    cond (stunned pc)
+        grid
+        (let current = get (y,x) grid |> withDefault emptySquare
+             stuck = current.monster /= Nothing
+             dest = pickDir grid (y,x) |> cond stuck (y,x)
+             grid' = update (y,x) (Maybe.map (setPC Nothing)) grid
+        in   update dest (Maybe.map (setPC (Just pc))) grid')
 
 movePCFrom : Point -> Grid -> Grid
 movePCFrom point grid =
     get point grid `andThen` (.pc)
-        |> Maybe.map (\pc -> movePCFrom' point pc grid)
+        |> Maybe.map (movePCFrom' point grid)
         |> withDefault grid
 
 damageMonster : Monster -> Maybe Monster
@@ -170,22 +170,25 @@ processAOOs model =
     let grid = model.grid
         triggerAOOsOn' : Grid -> Point -> PC -> Grid
         triggerAOOsOn' grid p pc =
-            let monsters = getMonstersNextTo grid p
-                    |> filter (snd>>(.currentCooldown)>>(==) 0)
-                processMonster : Grid -> (Point,Monster) -> Grid
-                processMonster grid (p2,m) =
-                    if m.currentCooldown == 0 then
-                        let statuses' = pc.statuses ++ [{statusType=Stun, duration=3}]
-                            pc' = {pc|statuses<-statuses'}
-                            monster' = {m|currentCooldown<-m.cooldown}
-                        in grid
-                            |> update p (Maybe.map (\s -> {s|pc<-Just pc'}))
-                            |> update p2 (Maybe.map (\s -> {s|monster<-Just monster'}))
-                    else grid
-            in
-                head monsters
-                    |> Maybe.map (processMonster grid)
-                    |> withDefault grid
+            if stunned pc then
+                grid
+            else
+                let monsters = getMonstersNextTo grid p
+                        |> filter (snd>>(.currentCooldown)>>(==) 0)
+                    processMonster : Grid -> (Point,Monster) -> Grid
+                    processMonster grid (p2,m) =
+                        if m.currentCooldown == 0 then
+                            let statuses' = pc.statuses ++ [{statusType=Stun, duration=3}]
+                                pc' = {pc|statuses<-statuses'}
+                                monster' = {m|currentCooldown<-m.cooldown}
+                            in grid
+                                |> update p (Maybe.map (\s -> {s|pc<-Just pc'}))
+                                |> update p2 (Maybe.map (\s -> {s|monster<-Just monster'}))
+                        else grid
+                in
+                    head monsters
+                        |> Maybe.map (processMonster grid)
+                        |> withDefault grid
         triggerAOOsOn : Point -> Grid -> Grid
         triggerAOOsOn p grid =
             get p grid `andThen` (.pc)
