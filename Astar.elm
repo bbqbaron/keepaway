@@ -14,9 +14,13 @@ prioritize grid p =
     let priority = 
         case get p grid of
             Just {item, monster} -> 
-                cond (item /= Nothing) 5 0
-                    +
-                cond (monster /= Nothing) -10 0
+                case item of
+                    Just i' -> i'.value
+                    Nothing -> 0
+                +
+                case monster of
+                    Just m' -> -m'.hp
+                    Nothing -> 0
             Nothing -> 0
     in (priority, p)
 

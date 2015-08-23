@@ -4,8 +4,8 @@ import Char exposing (toCode)
 import Color exposing (green, red)
 import Debug exposing (log)
 import Dict exposing (Dict, empty, get, insert, keys, update)
-import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, solid, square, text)
-import Graphics.Element exposing (Element)
+import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, solid, square, text, toForm)
+import Graphics.Element exposing (Element, image)
 import Html exposing (div, Html)
 import Keyboard exposing (arrows, isDown, space)
 import List exposing (drop, filter, foldl, head, length, map, reverse, sort, sortBy)
@@ -18,23 +18,12 @@ import Signal.Extra exposing (foldp')
 import Signal.Time exposing (startTime)
 
 import Astar exposing (movePoint, pickDir, prioritize)
-import Const exposing (height, tileSize, width)
+import Const exposing (..)
 import Types exposing (..)
 import Util exposing (bound, cond, origin)
 
 updates : Mailbox Action
 updates = mailbox Idle
-
-yRange : List Int
-yRange = [0..height-1]
-
-xRange : List Int
-xRange = [0..width-1]
-
-numberOfMonsters = 5
-numberOfItems = 5
-maxMonsterHp = 6
-maxItemValue = 6
 
 -- generators
 pointGenerator : Generator (Int,Int)
@@ -42,16 +31,6 @@ pointGenerator = pair (int 0 (height-1)) (int 0 (width-1))
 
 hpGenerator = int 1 maxMonsterHp
 valueGenerator = int 1 maxItemValue
-
-classes = [
-        {name="Cleric"},
-        {name="Warlock"},
-        {name="Ranger"},
-        {name="Shaman"},
-        {name="Crusader"},
-        {name="Alchemist"},
-        {name="Ninja"}
-    ]
 
 classNumGenerator = int 0 ((length classes)-1)
 
@@ -109,7 +88,7 @@ addRandom : SpecMaker a -> Inserter a -> Int -> Model -> Model
 addRandom genFn addFn howMany model =
     let grid = model.grid
         seed = model.seed
-        (specs,s') = foldl (\_ (l,s) -> genFn l s) ([], seed) [0..howMany]
+        (specs,s') = foldl (\_ (l,s) -> genFn l s) ([], seed) [0..howMany-1]
         grid' = foldl (\(p,a) g' -> update p (addFn a) g') grid specs
     in {model|
             grid<-grid',
@@ -311,25 +290,25 @@ renderPlayer {carrying, position} =
                 Nothing -> base
         in withText |> move (toPos y x)
 
+getImage : String -> Form
+getImage name = "assets/art/"++name++".png"
+    |> image tileSize tileSize
+    |> toForm
+
 renderSquare : Int -> Int -> Square -> Form
 renderSquare y x {item, monster, pc} = 
-    let form = 
+    let ground = getImage "Ground"
+        form = 
         case pc of
-            Just pc' ->
-                pc'.name ++ ": " ++ (toString pc'.xp) 
-                    |> fromString 
-                    |> text
+            Just pc' -> getImage pc'.class.name 
             Nothing -> 
                 case monster of
-                    Just monster' ->
-                        monster'.name ++ ": " ++ (toString monster'.hp) 
-                            |> fromString 
-                            |> text
+                    Just monster' -> getImage "Goblin"
                     Nothing -> 
                         case item of
-                            Just n -> n.name |> toString |> fromString |> text
+                            Just n -> getImage "Gold"
                             Nothing -> outlined (solid red) (square tileSize)
-    in form |> move (toPos y x)
+    in group [ground,form] |> move (toPos y x)
 
 renderRow : Int -> Grid -> List Form
 renderRow y g = map (\x->get (y,x) g |> withDefault emptySquare |> renderSquare y x) xRange
