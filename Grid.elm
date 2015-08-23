@@ -5,11 +5,11 @@ module Grid where
 -}
 
 import Dict exposing (get, insert, keys, toList, update, values)
-import List exposing (filter, filterMap, foldl, head, isEmpty, map, member)
+import List exposing (any, filter, filterMap, foldl, head, map, member)
 import Maybe exposing (andThen, Maybe(..), withDefault)
 
 import Astar exposing (pickDir)
-import Types exposing (Action(..), Dir(..), emptySquare, Grid, Item, Model, Monster, PC, Point, Square, StatusType(..))
+import Types exposing (Ability(..), Action(..), Dir(..), emptySquare, Grid, Item, Model, Monster, PC, Point, Square, StatusType(..))
 import Util exposing (cond, inBounds, isStun)
 
 dirsToAction : {x:Int, y:Int} -> Action
@@ -51,7 +51,7 @@ setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc}
 
 stunned : PC -> Bool
-stunned {statuses} = filter isStun statuses |> isEmpty |> not
+stunned {statuses} = any isStun statuses
 
 movePCFrom' : Point -> Grid -> PC -> Grid
 movePCFrom' (y,x) grid pc =
@@ -165,6 +165,9 @@ getPCPoints grid =
         |> Dict.filter (\k {pc} -> pc /= Nothing)
         |> keys
 
+isTough : PC -> Bool
+isTough {class} = any ((==) Tough) class.abilities
+
 processAOOs : Model -> Model
 processAOOs model =
     let grid = model.grid
@@ -178,7 +181,9 @@ processAOOs model =
                     processMonster : Grid -> (Point,Monster) -> Grid
                     processMonster grid (p2,m) =
                         if m.currentCooldown == 0 then
-                            let statuses' = pc.statuses ++ [{statusType=Stun, duration=3}]
+                            let statuses' = pc.statuses ++ [{
+                                    statusType=Stun, 
+                                    duration=cond (isTough pc) 2 3}]
                                 pc' = {pc|statuses<-statuses'}
                                 monster' = {m|currentCooldown<-m.cooldown}
                             in grid
@@ -206,7 +211,7 @@ tickCooldowns model =
 
 maybeEndGame : Model -> Model
 maybeEndGame model =
-    let noItems = (model.grid |> values |> filter ((.item)>> (/=) Nothing) |> isEmpty)
+    let noItems = (model.grid |> values |> any ((.item)>> (/=) Nothing) |> not)
     in
         cond noItems
         (let player = model.player

@@ -8,8 +8,8 @@ import Signal exposing ((<~))
 
 import Signal.Time exposing (startTime)
 
-import Const exposing (..)
-import Types exposing (..)
+import Const exposing (classes, height, maxItemValue, maxMonsterHp, numberOfItems, numberOfMonsters, numberOfPCs, width)
+import Types exposing (Class, Model, Point, Square)
 
 -- seed
 
@@ -17,6 +17,7 @@ startTimeSeed : Signal Seed
 startTimeSeed = initialSeed << round <~ startTime
 
 -- generators
+
 pointGenerator : Generator (Int,Int)
 pointGenerator = pair (int 0 (height-1)) (int 0 (width-1))
 
@@ -27,7 +28,7 @@ classNumGenerator = int 0 ((length classes)-1)
 
 classGenerator = customGenerator (\seed ->
         let (idx,s') = generate classNumGenerator seed
-            class = drop idx classes |> head |> withDefault {name="???"}
+            class = drop idx classes |> head |> withDefault {abilities=[], name="???"}
         in (class,s')
     )
 
@@ -78,4 +79,4 @@ addRandom genFn addFn howMany model =
 
 addItems = addRandom generateItem addItem numberOfItems
 addMonsters = addRandom generateMonster addMonster numberOfMonsters
-addPCs = addRandom generatePC addPC 2
+addPCs = addRandom generatePC addPC numberOfPCs

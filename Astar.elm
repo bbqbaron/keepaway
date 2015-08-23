@@ -13,13 +13,9 @@ prioritize : Grid -> Point -> (Int, Point)
 prioritize grid p =
     let priority = 
             get p grid
-                -- TODO it's fine to drop priority,
-                -- but since PCs cannot actually stack,
-                -- this is a bug waiting to happen
                 |> Maybe.map (\{item, monster, pc} -> 
                     withDefault 0 (Maybe.map (.value) item)
                     + withDefault 0 (Maybe.map ((.hp) >> (*) -1) monster)
-                    + withDefault 0 (Maybe.map (\_ -> -1000) pc)
                 )
                 |> withDefault 0
     in (priority, p)
@@ -29,7 +25,7 @@ movePoint (y,x) (y1,x1) = (y+y1, x+x1)
 
 pickDir : Grid -> Point -> Point
 pickDir grid (y,x) =
-    -- TODO cache and recalc if you're there
+    -- TODO cache and recalc if you're there?
     let (y',x') = seek grid (y,x)
         (y'',x'') =
             if | y' > y -> (1,0)

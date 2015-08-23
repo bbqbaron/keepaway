@@ -18,7 +18,12 @@ type alias Monster = {
         hp:Int
     }
 
-type alias Class = {name:String}
+type Ability = Tough
+
+type alias Class = {
+        abilities: List Ability,
+        name: String
+    }
 
 type StatusType = Stun
 
@@ -52,5 +57,8 @@ type alias Model = {
         seed: Seed
     }
 
+-- TODO this is used in a few places to get around proper control flow,
+-- and not just as a model initializer.
+-- Remove these uses.
 emptySquare : Square
 emptySquare = {item=Nothing, monster=Nothing, pc=Nothing}
