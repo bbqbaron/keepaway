@@ -64,13 +64,16 @@ renderMonster monster =
         (group [base, cooldown |> toString |> fromString |> text])
         base
 
+renderItem : Item -> Form
+renderItem {value} =group [getImage "Gold", value |> toString |> fromString |> text]
+
 renderSquare : Int -> Int -> Square -> Form
 renderSquare y x {item, monster, pc} = 
     let ground = getImage "Ground"
         grp = oneOf [
                 (pc |> Maybe.map renderPC),
                 (monster |> Maybe.map renderMonster),
-                (item |> Maybe.map (\_ -> getImage "Gold"))
+                (item |> Maybe.map renderItem)
             ]
             |> Maybe.map ((flip (::) [ground])>>reverse>>group)
             |> withDefault ground
@@ -96,7 +99,7 @@ renderPoints model = model.player.points |> toString |> Html.text
 
 render : Model -> Html
 render model =
-    if model.player.points > 0 then
+    if model.player.alive then
         div [] [
             renderGrid model |> Html.fromElement,
             renderPoints model

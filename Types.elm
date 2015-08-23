@@ -41,7 +41,7 @@ type alias Player = {
         carrying: Maybe Item,
         position: Point,
         points: Int,
-        alive:Bool
+        alive: Bool
     }
 
 type alias Grid = Dict Point Square

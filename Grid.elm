@@ -103,10 +103,10 @@ resolveCollisions model =
 calculatePoints : Model -> Model
 calculatePoints model =
     let grid = model.grid
-        accPoints = \{item} points ->
+        accPoints {item} points =
             let new = Maybe.map (.value) item |> withDefault 0
             in new + points
-        points = grid |> values |> foldl accPoints 0
+        points = grid |> values |> foldl accPoints model.player.points
         points' = points + (Maybe.map (.value) player.carrying |> withDefault 0)
         player = model.player
         player' = {player|points<-points'}
@@ -143,7 +143,7 @@ squashPlayer model =
         pos = player.position
         square = get pos model.grid |> withDefault emptySquare
         hasPC = square.pc /= Nothing
-        player' = cond hasPC {player|points<-0} player
+        player' = cond hasPC {player|alive<-False} player
     in {model|player<-player'}
 
 getNeighbors : Point -> List Point
@@ -164,12 +164,6 @@ getPCPoints grid =
     grid
         |> Dict.filter (\k {pc} -> pc /= Nothing)
         |> keys
-
-filterSquares : Grid -> (Square->Maybe a) -> List (Point,Square)
-filterSquares grid fn =
-    grid
-        |> toList
-        |> filter (\(p,s) -> fn s /= Nothing)
 
 processAOOs : Model -> Model
 processAOOs model =
@@ -204,16 +198,15 @@ processAOOs model =
 
 tickCooldowns : Model -> Model
 tickCooldowns model =
-    let grid = model.grid
-        monsterPoints = filterSquares grid (.monster)
-        cooldownAt : (Point,Square) -> (Point,Square)
-        cooldownAt (point, square) =
-            square.monster
-                |> Maybe.map (\monster ->
-                        let cc' = max 0 (monster.currentCooldown-1)
-                            m' = {monster|currentCooldown<-cc'}
-                        in (point, {square|monster<-Just m'}))
-                |> withDefault (point, square)
-        grid' = map cooldownAt monsterPoints
-            |> foldl (uncurry insert) grid
-    in {model|grid<-grid'}
+    let tickMonster monster = {monster|currentCooldown<-max 0 (monster.currentCooldown-1)}
+    in  {model|grid<-Dict.map (\_ square -> {square|monster<-Maybe.map tickMonster square.monster}) model.grid}
+
+maybeEndGame : Model -> Model
+maybeEndGame model =
+    let noItems = (model.grid |> values |> filter ((.item)>> (/=) Nothing) |> isEmpty)
+    in
+        cond noItems
+        (let player = model.player
+             player' = {player|alive<-False}
+        in {model|player<-player'})
+        model

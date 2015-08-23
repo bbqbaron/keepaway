@@ -39,7 +39,6 @@ init (_,s) = {
         |> addPCs
         -- who knows? pc could be standing on an item
         |> resolveCollisions
-        |> calculatePoints
 
 step : (Action, Seed) -> Model -> Model
 step (action, _) model = 
@@ -54,12 +53,14 @@ step (action, _) model =
                 in {model'|player<-player'}
                     |> movePCs
                     |> processAOOs
+                    |> tickCooldowns
             Fetch -> swapItems model
-            Restart -> cond (model.player.points<=0) (init ((), model.seed)) model
+            Restart -> cond (model.player.alive) model (init ((), model.seed))
             _ -> model
     in model'
         |> calculatePoints
         |> squashPlayer
+        |> maybeEndGame
 
 onRelease : Action -> Signal Bool -> Signal Action
 onRelease a k =
@@ -72,7 +73,7 @@ state =
         (,) <~ (mergeMany
             [
                 updates.signal,
-                (dirsToAction <~ arrows),
+                Signal.filter ((/=) Idle) Idle (dirsToAction <~ arrows),
                 space |> onRelease Fetch,
                 isDown 82 |> onRelease Restart
             ]
