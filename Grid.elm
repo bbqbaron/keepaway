@@ -175,7 +175,7 @@ processAOOs model =
                 processMonster : Grid -> (Point,Monster) -> Grid
                 processMonster grid (p2,m) =
                     if m.currentCooldown == 0 then
-                        let statuses' = pc.statuses ++ [{statusType=Stun, duration=12}]
+                        let statuses' = pc.statuses ++ [{statusType=Stun, duration=3}]
                             pc' = {pc|statuses<-statuses'}
                             monster' = {m|currentCooldown<-m.cooldown}
                         in grid

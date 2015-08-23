@@ -13,7 +13,7 @@ import List exposing (filter, head, map, reverse, sortBy)
 import Maybe exposing (andThen, oneOf, withDefault)
 import Text exposing (fromString)
 
-import Html exposing (div, Html)
+import Html exposing (div, Html, p)
 
 import Const exposing (..)
 import Types exposing (..)
@@ -95,7 +95,25 @@ renderGrid {grid, player} =
         |> collage (height*tileSize) (width*tileSize)
 
 renderPoints : Model -> Html
-renderPoints model = model.player.points |> toString |> Html.text
+renderPoints model = "Points: " ++ toString model.player.points 
+    |> Html.text
+
+renderRules : Html
+renderRules =
+    [
+        "Welcome to Item Keepaway.",
+        "Move with the arrows. Movement triggers a Turn.",
+        "Each Turn, enemies will move one square if able, or fight a monster.",
+        "Fighting a monster reduces its HP by 1.",
+        "Monsters will stun PCs who come near them, if not on cooldown.",
+        "Pick up/drop items with Space.",
+        "Anything other than a Goblin or Gold is hostile.",
+        "You earn points each turn for any item on the field.",
+        "The game ends when no items remain on the field.",
+        "Press R to begin."
+    ]
+    |> map (Html.text>>flip (::) []>>p [])
+    |> div []
 
 render : Model -> Html
 render model =
@@ -105,6 +123,4 @@ render model =
             renderPoints model
         ]
     else
-        div [] [
-            Html.text "DEAD"
-        ]
+        renderRules
