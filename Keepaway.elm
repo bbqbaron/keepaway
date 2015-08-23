@@ -300,15 +300,18 @@ renderSquare y x {item, monster, pc} =
     let ground = getImage "Ground"
         form = 
         case pc of
-            Just pc' -> getImage pc'.class.name 
+            Just pc' -> getImage pc'.class.name |> Just
             Nothing -> 
                 case monster of
-                    Just monster' -> getImage "Goblin"
+                    Just monster' -> getImage "Goblin" |> Just
                     Nothing -> 
                         case item of
-                            Just n -> getImage "Gold"
-                            Nothing -> outlined (solid red) (square tileSize)
-    in group [ground,form] |> move (toPos y x)
+                            Just n -> getImage "Gold" |> Just
+                            Nothing -> Nothing
+        grp = case form of
+            Just f -> group [ground,f]
+            Nothing -> ground
+    in grp |> move (toPos y x)
 
 renderRow : Int -> Grid -> List Form
 renderRow y g = map (\x->get (y,x) g |> withDefault emptySquare |> renderSquare y x) xRange
