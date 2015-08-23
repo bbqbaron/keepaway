@@ -23,6 +23,9 @@ import Util exposing (bound, cond, inBounds)
 updates : Mailbox Action
 updates = mailbox Idle
 
+port playSound : Signal String
+port playSound = Signal.dropRepeats ((.soundToPlay) <~ state)
+
 init : (a,Seed) -> Model
 init (_,s) = {
         player={
@@ -32,7 +35,8 @@ init (_,s) = {
             position=(4,4)
         },
         seed=s,
-        grid=foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g xRange) empty yRange
+        grid=foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g xRange) empty yRange,
+        soundToPlay=""
     } 
         |> addItems
         |> addMonsters
@@ -66,7 +70,7 @@ step (action, _) model =
                     |> maybeEndGame
             Fetch -> swapItems model
             Restart ->
-                cond (model.player.alive) model ((init ((), model.seed)) |> start)
+                cond (model.player.alive) model (init ((), model.seed) |> start)
             _ -> model
     in model'
 

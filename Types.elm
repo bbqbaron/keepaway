@@ -55,7 +55,8 @@ type alias Grid = Dict Point Square
 type alias Model = {
         grid: Grid,
         player: Player,
-        seed: Seed
+        seed: Seed,
+        soundToPlay: String
     }
 
 -- TODO this is used in a few places to get around proper control flow,

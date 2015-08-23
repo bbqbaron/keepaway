@@ -5,5 +5,11 @@
     <script src='elm.js'></script>
     <script>
         var foo = Elm.fullscreen(Elm.Keepaway, {});
+
+        var coin = new Audio("assets/sound/coin.wav");
+
+        foo.ports.playSound.subscribe(function() {
+        	coin.play();
+        });
     </script>
 </html>
