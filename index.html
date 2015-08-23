@@ -4,12 +4,34 @@
     </body>
     <script src='elm.js'></script>
     <script>
-        var foo = Elm.fullscreen(Elm.Keepaway, {});
+        function nameToFileName(name) {
+            return "assets/sound/"+name+".wav";
+        }
 
-        var coin = new Audio("assets/sound/coin.wav");
+        var game = Elm.fullscreen(Elm.Keepaway, {}),
+        	soundFiles = [
+        		'coin'
+        	],
+        	audioElements = {},
+        	i,
+        	coin,
+        	fileName;
 
-        foo.ports.playSound.subscribe(function() {
-        	coin.play();
+        for (i=0; i<soundFiles.length; i++) {
+        	fileName = nameToFileName(soundFiles[i]);
+
+        	audioElements[fileName] = new Audio(fileName);
+        }
+
+        game.ports.playSound.subscribe(function(name) {
+            var fileName;
+
+            fileName = nameToFileName(name);
+
+            if (audioElements[fileName]) {
+                audioElements[fileName].play();
+            }
         });
+
     </script>
 </html>

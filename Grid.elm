@@ -44,7 +44,8 @@ swapItems model =
     in {
         model|
             player<-player',
-            grid<-grid'
+            grid<-grid',
+            soundToPlay<-"coin"
     }
 
 stunned : PC -> Bool

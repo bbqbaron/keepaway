@@ -62,7 +62,7 @@ renderHP currentHP maxHP =
             |> filled red
         current = rect (tileSize * (toFloat currentHP)/(toFloat maxHP)) (tileSize/5)
             |> filled green
-            |> moveX ((tileSize - (tileSize * (toFloat currentHP)/(toFloat maxHP))) * -1)
+            |> moveX ((tileSize - (tileSize * (toFloat currentHP)/(toFloat maxHP))) * -0.5)
     in group [max, current]
             |> moveY (tileSize * -0.3)
 
