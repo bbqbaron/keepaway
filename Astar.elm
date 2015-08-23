@@ -1,5 +1,9 @@
 module Astar where
 
+{-| not really Astar; optimistic module naming
+
+-}
+
 import Debug exposing (log)
 import Dict exposing (get, keys)
 import List exposing (filter, head, length, map, reverse, sort, sortBy, sum)
@@ -8,7 +12,6 @@ import Maybe exposing (Maybe(..), withDefault)
 import Types exposing (..)
 import Util exposing (bound, cond)
 
--- not really Astar; optimistic module naming
 prioritize : Grid -> Point -> (Int, Point)
 prioritize grid p =
     let priority = 
@@ -25,7 +28,6 @@ movePoint (y,x) (y1,x1) = (y+y1, x+x1)
 
 pickDir : Grid -> Point -> Point
 pickDir grid (y,x) =
-    -- TODO cache and recalc if you're there?
     let (y',x') = seek grid (y,x)
         (y'',x'') =
             if | y' > y -> (1,0)
