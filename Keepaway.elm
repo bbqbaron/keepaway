@@ -293,6 +293,7 @@ getMonstersNextTo grid p =
                     if member p neighbors then Just (p,m) else Nothing
                 Nothing -> Nothing)
 
+-- TODO dedupe with filterSquares
 getWith : Grid -> (Square->Maybe a) -> List (Point,a)
 getWith grid fn =
     grid
@@ -300,6 +301,14 @@ getWith grid fn =
         |> filterMap (\(p,s) -> case fn s of
                 Just i -> Just (p,i)
                 Nothing -> Nothing)
+
+filterSquares : Grid -> (Square->Maybe a) -> List (Point,Square)
+filterSquares grid fn =
+    grid
+        |> toList
+        |> filter (\(p,s) -> case fn s of
+                Just i -> True
+                Nothing -> False)
 
 processAOOs : Model -> Model
 processAOOs model =
@@ -325,8 +334,8 @@ processAOOs model =
                         else
                             grid
                     Nothing -> grid
-        triggerAOOs : Grid -> Point -> Grid
-        triggerAOOs grid p =
+        triggerAOOs : Point -> Grid -> Grid
+        triggerAOOs p grid =
             let s = get p grid
             in
                 case s of
@@ -335,13 +344,24 @@ processAOOs model =
                             Just pc -> triggerAOOsOn p pc
                             Nothing -> grid
                     Nothing -> grid
-        grid' = foldl (\p g' -> triggerAOOs g' p) grid pcPoints
+        grid' = foldl triggerAOOs grid pcPoints
     in {model|grid<-grid'}
 
---cooldowns : Model -> Model
---cooldowns model =
---    let grid = model.grid
---        monsterPoints = getBy grid (.monster)
+tickCooldowns : Model -> Model
+tickCooldowns model =
+    let grid = model.grid
+        monsterPoints = filterSquares grid (.monster)
+        cooldownAt : (Point,Square) -> (Point,Square)
+        cooldownAt (point, square) =
+            case square.monster of
+                Just monster ->
+                    let cc' = max 0 (monster.currentCooldown-1)
+                        m' = {monster|currentCooldown<-cc'}
+                    in (point, {square|monster<-Just m'})
+                Nothing -> (point, square)
+        grid' = map cooldownAt monsterPoints
+            |> foldl (uncurry insert) grid
+    in {model|grid<-grid'}
 
 step : (Action, Seed) -> Model -> Model
 step (action, _) model = 
@@ -432,6 +452,8 @@ addForm f l = l ++ [f]
 
 renderGrid : Model -> Element
 renderGrid {grid, player} =
+    -- TODO this is a relic of a nested list.
+    -- just `Dict.map` over `grid`?
     map (\y->renderRow y grid) yRange
         |> flatten
         |> addForm (renderPlayer player)
