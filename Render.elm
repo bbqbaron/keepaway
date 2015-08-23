@@ -102,15 +102,18 @@ renderPoints model = "Points: " ++ toString model.player.points
 renderRules : Html
 renderRules =
     [
-        "Welcome to Item Keepaway.",
-        "Move with the arrows. Movement triggers a Turn.",
-        "Each Turn, enemies will move one square if able, or fight a monster.",
-        "Fighting a monster reduces its HP by 1.",
-        "Monsters will stun PCs who come near them, if not on cooldown.",
-        "Pick up/drop items with Space.",
-        "Anything other than a Goblin or Gold is hostile.",
-        "You earn points each turn for any item on the field.",
-        "The game ends when no items remain on the field.",
+        "Welcome to Imp.",
+        "You are an imp. Your arbitrary square of ground is under attack by intrepid busybody PCs
+            in search of phat lewtz. You cannot defeat them, but you can delay and frustrate them for as long
+            as possible. Put the gold where it's hardest to reach.",
+        "You can pick up/drop a stack of gold with Space.",
+        "Move with the arrows. Each movement triggers a Turn.",
+        "Each Turn, PCs will:",
+        "   * if in a square with a Goblin, reduce its hit points by 1",
+        "   * otherwise, move one square toward gold",
+        "Each Turn, Goblins will stun a nearby PC for a certain number of Turns. This ability has a cooldown.",
+        "Each Turn, for each stack of gold on the field, you earn points equal to its value. Keep it going!",
+        "The game ends when no gold remains on the field.",
         "Press R to begin."
     ]
     |> map (Html.text>>flip (::) []>>p [])
