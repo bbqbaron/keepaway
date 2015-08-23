@@ -9,15 +9,15 @@ each Square a "widget", but the data's awfully intertwined, by necessity.
 import Dict exposing (get)
 import Graphics.Collage exposing (collage, filled, Form, group, move, outlined, solid, square, text, toForm)
 import Graphics.Element exposing (Element, image)
-import List exposing (map)
-import Maybe exposing (withDefault)
+import List exposing (filter, head, map, reverse, sortBy)
+import Maybe exposing (andThen, oneOf, withDefault)
 import Text exposing (fromString)
 
 import Html exposing (div, Html)
 
 import Const exposing (..)
 import Types exposing (..)
-import Util exposing (flatten, origin)
+import Util exposing (cond, flatten, origin, isStun)
 
 toPos : Int -> Int -> (Float, Float)
 toPos y x = 
@@ -28,9 +28,10 @@ renderPlayer : Player -> Form
 renderPlayer {carrying, position} = 
     let (y,x) = position
         base = getImage "Imp"
-        withText = case carrying of
-                Just i -> group [base, i |> toString |> fromString |> text]
-                Nothing -> base
+        withText = 
+            carrying
+            |> Maybe.map (\i -> group [base, i |> toString |> fromString |> text])
+            |> withDefault base
         in withText |> move (toPos y x)
 
 getImage : String -> Form
@@ -38,19 +39,41 @@ getImage name = "assets/art/"++name++".png"
     |> image tileSize tileSize
     |> toForm
 
+renderPC : PC -> Form
+renderPC pc =
+    let base = getImage pc.class.name
+        renderStun stun = 
+            stun.duration
+                |> toString
+                |> fromString
+                |> text
+    in filter isStun pc.statuses
+            |> sortBy (.duration)
+            |> reverse
+            |> head
+            |> Maybe.map renderStun
+            |> Maybe.map (flip (::) [base]>>reverse>>group)
+            |> withDefault base
+
+renderMonster : Monster -> Form
+renderMonster monster =
+    let base = getImage "Goblin"
+        cooldown = monster.currentCooldown
+    in cond
+        (cooldown > 0)
+        (group [base, cooldown |> toString |> fromString |> text])
+        base
+
 renderSquare : Int -> Int -> Square -> Form
 renderSquare y x {item, monster, pc} = 
     let ground = getImage "Ground"
-        form = 
-        case pc of
-            Just pc' -> getImage pc'.class.name |> Just
-            Nothing -> 
-                case monster of
-                    Just monster' -> getImage "Goblin" |> Just
-                    Nothing -> Maybe.map (\item -> getImage "Gold") item
-        grp = case form of
-            Just f -> group [ground,f]
-            Nothing -> ground
+        grp = oneOf [
+                (pc |> Maybe.map renderPC),
+                (monster |> Maybe.map renderMonster),
+                (item |> Maybe.map (\_ -> getImage "Gold"))
+            ]
+            |> Maybe.map ((flip (::) [ground])>>reverse>>group)
+            |> withDefault ground
     in grp |> move (toPos y x)
 
 renderRow : Int -> Grid -> List Form

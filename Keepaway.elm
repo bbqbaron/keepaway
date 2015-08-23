@@ -17,7 +17,7 @@ import Const exposing (..)
 import Generators exposing (..)
 import Render exposing (render)
 import Types exposing (..)
-import Util exposing (bound, cond, inBounds)
+import Util exposing (bound, cond, inBounds, isStun)
 
 updates : Mailbox Action
 updates = mailbox Idle
@@ -77,10 +77,6 @@ swapItems model =
 
 setPC : Maybe PC -> Square -> Square
 setPC pc s = {s|pc<-pc}
-
-isStun a = case a of
-    Stun n -> True
-    _ -> False
 
 movePCFrom' : Point -> PC -> Grid -> Grid
 movePCFrom' (y,x) pc grid =
@@ -154,11 +150,9 @@ movePCs model =
 tick : Model -> Model
 tick model =
     let grid = model.grid
-        decStun stun = case stun of
-            Stun n ->
-                if | n > 1 -> (n-1) |> Stun |> Just
-                   | otherwise -> Nothing
-            _ -> Nothing
+        decStun stun = 
+            if | stun.duration > 1 -> Just {stun|duration<-stun.duration-1}
+               | otherwise -> Nothing
         tickStun : PC -> PC
         tickStun pc =
             let stuns = filter isStun pc.statuses
@@ -193,12 +187,11 @@ getMonstersNextTo grid p =
         |> filterMap (\(p,{monster}) -> 
             cond (member p neighbors) (Maybe.map ((,) p) monster) Nothing)
 
--- TODO dedupe with filterSquares
-getWith : Grid -> (Square->Maybe a) -> List (Point,a)
-getWith grid fn =
+getPCPoints : Grid -> List Point
+getPCPoints grid =
     grid
-        |> toList
-        |> filterMap (\(p,s) -> fn s |> Maybe.map ((,) p))
+        |> Dict.filter (\k {pc} -> pc /= Nothing)
+        |> keys
 
 filterSquares : Grid -> (Square->Maybe a) -> List (Point,Square)
 filterSquares grid fn =
@@ -209,30 +202,32 @@ filterSquares grid fn =
 processAOOs : Model -> Model
 processAOOs model =
     let grid = model.grid
-        pcPoints = getWith grid (.pc) |> map fst
-        triggerAOOsOn : Point -> PC -> Grid
-        triggerAOOsOn p pc =
+        triggerAOOsOn' : Grid -> Point -> PC -> Grid
+        triggerAOOsOn' grid p pc =
             let monsters = getMonstersNextTo grid p
-                processMonster : (Point,Monster) -> Grid
-                processMonster (_,m) =
+                    |> filter (snd>>(.currentCooldown)>>(==) 0)
+                processMonster : Grid -> (Point,Monster) -> Grid
+                processMonster grid (p2,m) =
                     if m.currentCooldown == 0 then
-                        let statuses' = pc.statuses ++ [Stun 12]
+                        let statuses' = pc.statuses ++ [{statusType=Stun, duration=12}]
                             pc' = {pc|statuses<-statuses'}
                             monster' = {m|currentCooldown<-m.cooldown}
                         in grid
                             |> update p (Maybe.map (\s -> {s|pc<-Just pc'}))
-                            |> update p (Maybe.map (\s -> {s|monster<-Just monster'}))
+                            |> update p2 (Maybe.map (\s -> {s|monster<-Just monster'}))
                     else grid
             in
                 head monsters
-                    |> Maybe.map processMonster
+                    |> Maybe.map (processMonster grid)
                     |> withDefault grid
-        triggerAOOs : Point -> Grid -> Grid
-        triggerAOOs p grid =
+        triggerAOOsOn : Point -> Grid -> Grid
+        triggerAOOsOn p grid =
             get p grid `andThen` (.pc)
-                |> Maybe.map (triggerAOOsOn p)
+                |> Maybe.map (triggerAOOsOn' grid p)
                 |> withDefault grid
-        grid' = foldl triggerAOOs grid pcPoints
+        -- TODO just foldl over grid
+        pcPoints = getPCPoints grid
+        grid' = foldl triggerAOOsOn grid pcPoints
     in {model|grid<-grid'}
 
 tickCooldowns : Model -> Model

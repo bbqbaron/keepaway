@@ -20,7 +20,9 @@ type alias Monster = {
 
 type alias Class = {name:String}
 
-type Status = Stun Int
+type StatusType = Stun
+
+type alias Status = {duration:Int, statusType:StatusType}
 
 type alias PC = {
         class:Class,
