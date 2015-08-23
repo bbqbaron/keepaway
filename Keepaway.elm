@@ -54,13 +54,13 @@ step (action, _) model =
                     |> movePCs
                     |> processAOOs
                     |> tickCooldowns
+                    |> calculatePoints
+                    |> squashPlayer
+                    |> maybeEndGame
             Fetch -> swapItems model
             Restart -> cond (model.player.alive) model (init ((), model.seed))
             _ -> model
     in model'
-        |> calculatePoints
-        |> squashPlayer
-        |> maybeEndGame
 
 onRelease : Action -> Signal Bool -> Signal Action
 onRelease a k =
