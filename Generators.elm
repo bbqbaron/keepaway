@@ -60,12 +60,12 @@ addMonster : Inserter Int
 addMonster = inserter (\hp square -> {square|monster<-Just {name="M", hp=hp, cooldown=4, currentCooldown=0}})
 
 addPC : Inserter Class
-addPC = inserter (\class square -> {square|pc<-Just {
+addPC = inserter (\class square -> {square|pcs<-{
             name="PC",
             class=class,
             statuses=[],
             xp=0}
-        })
+        :: square.pcs})
 
 addRandom : SpecMaker a -> Inserter a -> Int -> Model -> Model
 addRandom genFn addFn howMany model =

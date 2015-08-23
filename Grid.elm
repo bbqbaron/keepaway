@@ -47,27 +47,37 @@ swapItems model =
             grid<-grid'
     }
 
-setPC : Maybe PC -> Square -> Square
-setPC pc s = {s|pc<-pc}
-
 stunned : PC -> Bool
 stunned {statuses} = any isStun statuses
 
-movePCFrom' : Point -> Grid -> PC -> Grid
-movePCFrom' (y,x) grid pc =
+removePC : PC -> Square -> Square
+removePC pc square = {square|pcs <- filter ((/=) pc) square.pcs}
+
+addPC : PC -> Square -> Square
+addPC pc square = {square|pcs <- pc :: square.pcs}
+
+movePCFrom : Point -> PC -> Grid -> Grid
+movePCFrom (y,x) pc grid =
     cond (stunned pc)
         grid
-        (let current = get (y,x) grid |> withDefault emptySquare
-             stuck = current.monster /= Nothing
+        (let stuck = get (y,x) grid
+                        |> Maybe.map ((.monster) >> (/=) Nothing)
+                        |> withDefault False
              dest = pickDir grid (y,x) |> cond stuck (y,x)
-             grid' = update (y,x) (Maybe.map (setPC Nothing)) grid
-        in   update dest (Maybe.map (setPC (Just pc))) grid')
+             grid' = update (y,x) (Maybe.map (removePC pc)) grid
+        in   update dest (Maybe.map (addPC pc)) grid')
 
-movePCFrom : Point -> Grid -> Grid
-movePCFrom point grid =
-    get point grid `andThen` (.pc)
-        |> Maybe.map (movePCFrom' point grid)
-        |> withDefault grid
+movePCsFrom : (Point,Square) -> Grid -> Grid
+movePCsFrom (point,square) grid =
+    foldl (movePCFrom point) grid square.pcs
+
+-- TODO better to preselect keys with PCs in them and foldl over them?
+-- Could cut down on allocations.
+movePCs : Model -> Model
+movePCs model = 
+    let grid = model.grid
+        grid' = foldl movePCsFrom grid (toList grid)
+    in {model|grid<-grid'}
 
 damageMonster : Monster -> Maybe Monster
 damageMonster monster =
@@ -79,21 +89,26 @@ damageMonster monster =
 
 resolveCollisionAt : Point -> Square -> Square
 resolveCollisionAt _ square =
-    let resolve' : PC -> Square
-        resolve' pc = 
-            let monster' = square.monster `andThen` damageMonster
+    let resolve' : PC -> Square -> Square
+        resolve' pc square = 
+            let others : List PC
+                others = filter ((/=) pc) square.pcs
+                monster' : Maybe Monster
+                monster' = square.monster `andThen` damageMonster
+                getXp : Bool
                 getXp = square.item /= Nothing || (square.monster /= Nothing && monster' == Nothing)
                 value : Int
                 value = Maybe.map (.value) square.item |> withDefault 0
+                xp' : Int
                 xp' = pc.xp + (cond getXp value 0)
+                pc' : PC
                 pc' = {pc|xp<-xp'}
             in {square|
                     item<-Nothing,
                     monster<-monster',
-                    pc<-Just pc'
+                    pcs<-pc'::others
                 }
-    in Maybe.map resolve' square.pc 
-        |> withDefault square
+    in foldl resolve' square square.pcs
 
 resolveCollisions : Model -> Model
 resolveCollisions model =
@@ -112,13 +127,6 @@ calculatePoints model =
         player' = {player|points<-points'}
     in {model|player<-player'}
 
-movePCs : Model -> Model
-movePCs model = 
-    let grid = model.grid
-        pcs = Dict.filter (\_ {pc} -> pc /= Nothing) grid |> keys
-        grid' = foldl movePCFrom grid pcs
-    in {model|grid<-grid'} |> resolveCollisions
-
 tick : Model -> Model
 tick model =
     let grid = model.grid
@@ -131,9 +139,7 @@ tick model =
                 stuns' = filterMap decStun stuns
                 nonstuns = filter (isStun>>not) pc.statuses
             in {pc|statuses<-nonstuns++stuns'}
-        tick p s = case s.pc of
-            Just pc -> {s|pc<-tickStun pc |> Just}
-            Nothing -> s
+        tick p s = {s|pcs<-map tickStun s.pcs}
         grid' = Dict.map tick grid
     in {model|grid<-grid'}
 
@@ -142,7 +148,7 @@ squashPlayer model =
     let player = model.player
         pos = player.position
         square = get pos model.grid |> withDefault emptySquare
-        hasPC = square.pc /= Nothing
+        hasPC = square.pcs /= []
         player' = cond hasPC {player|alive<-False} player
     in {model|player<-player'}
 
@@ -162,47 +168,49 @@ getMonstersNextTo grid p =
 getPCPoints : Grid -> List Point
 getPCPoints grid =
     grid
-        |> Dict.filter (\k {pc} -> pc /= Nothing)
+        |> Dict.filter (\_ {pcs} -> pcs /= [])
         |> keys
 
 isTough : PC -> Bool
 isTough {class} = any ((==) Tough) class.abilities
 
+triggerMonsterAOOOn : Grid -> (Point,PC) -> (Point,Monster) -> Grid
+triggerMonsterAOOOn grid (pcPoint,pc) (monsterPoint,monster) =
+    if monster.currentCooldown == 0 then
+        let statuses' = pc.statuses ++ [{
+                statusType=Stun, 
+                duration=cond (isTough pc) 2 3}]
+            pc' = {pc|statuses<-statuses'}
+            monster' = {monster|currentCooldown<-monster.cooldown}
+        in grid
+            |> update pcPoint (Maybe.map (\s -> 
+                {s|pcs <- pc' :: (filter ((/=) pc) s.pcs)})
+            )
+            |> update monsterPoint (Maybe.map (\s -> {s|monster<-Just monster'}))
+    else grid
+
+triggerAOOsOnPC : Point -> Square -> Grid -> PC -> Grid
+triggerAOOsOnPC point square grid pc =
+    cond
+        (stunned pc)
+        grid
+        (
+            let monsters = getMonstersNextTo grid point |> filter (snd>>(.currentCooldown)>>(==) 0) 
+            in
+                head monsters
+                    |> Maybe.map (triggerMonsterAOOOn grid (point,pc))
+                    |> withDefault grid
+        )
+
+triggerAOOsAt : (Point, Square) -> Grid -> Grid
+triggerAOOsAt (point, square) grid =
+    square.pcs
+        |> head
+        |> Maybe.map (triggerAOOsOnPC point square grid)
+        |> withDefault grid
+
 processAOOs : Model -> Model
-processAOOs model =
-    let grid = model.grid
-        triggerAOOsOn' : Grid -> Point -> PC -> Grid
-        triggerAOOsOn' grid p pc =
-            if stunned pc then
-                grid
-            else
-                let monsters = getMonstersNextTo grid p
-                        |> filter (snd>>(.currentCooldown)>>(==) 0)
-                    processMonster : Grid -> (Point,Monster) -> Grid
-                    processMonster grid (p2,m) =
-                        if m.currentCooldown == 0 then
-                            let statuses' = pc.statuses ++ [{
-                                    statusType=Stun, 
-                                    duration=cond (isTough pc) 2 3}]
-                                pc' = {pc|statuses<-statuses'}
-                                monster' = {m|currentCooldown<-m.cooldown}
-                            in grid
-                                |> update p (Maybe.map (\s -> {s|pc<-Just pc'}))
-                                |> update p2 (Maybe.map (\s -> {s|monster<-Just monster'}))
-                        else grid
-                in
-                    head monsters
-                        |> Maybe.map (processMonster grid)
-                        |> withDefault grid
-        triggerAOOsOn : Point -> Grid -> Grid
-        triggerAOOsOn p grid =
-            get p grid `andThen` (.pc)
-                |> Maybe.map (triggerAOOsOn' grid p)
-                |> withDefault grid
-        -- TODO just foldl over grid
-        pcPoints = getPCPoints grid
-        grid' = foldl triggerAOOsOn grid pcPoints
-    in {model|grid<-grid'}
+processAOOs model = {model|grid <- foldl triggerAOOsAt model.grid (toList model.grid)}
 
 tickCooldowns : Model -> Model
 tickCooldowns model =

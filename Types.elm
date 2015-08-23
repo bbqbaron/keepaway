@@ -39,7 +39,7 @@ type alias PC = {
 type alias Square = {
         item: Maybe Item,
         monster: Maybe Monster,
-        pc: Maybe PC
+        pcs: List PC
     }
 
 type alias Player = {
@@ -61,4 +61,4 @@ type alias Model = {
 -- and not just as a model initializer.
 -- Remove these uses.
 emptySquare : Square
-emptySquare = {item=Nothing, monster=Nothing, pc=Nothing}
+emptySquare = {item=Nothing, monster=Nothing, pcs=[]}

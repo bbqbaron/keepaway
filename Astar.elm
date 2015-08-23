@@ -13,7 +13,7 @@ prioritize : Grid -> Point -> (Int, Point)
 prioritize grid p =
     let priority = 
             get p grid
-                |> Maybe.map (\{item, monster, pc} -> 
+                |> Maybe.map (\{item, monster, pcs} -> 
                     withDefault 0 (Maybe.map (.value) item)
                     + withDefault 0 (Maybe.map ((.hp) >> (*) -1) monster)
                 )

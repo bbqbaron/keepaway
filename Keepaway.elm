@@ -58,6 +58,7 @@ step (action, _) model =
                     model' = tick model
                 in {model'|player<-player'}
                     |> movePCs
+                    |> resolveCollisions
                     |> processAOOs
                     |> tickCooldowns
                     |> calculatePoints

@@ -69,10 +69,10 @@ renderItem : Item -> Form
 renderItem {value} =group [getImage "Gold", value |> toString |> fromString |> text]
 
 renderSquare : Int -> Int -> Square -> Form
-renderSquare y x {item, monster, pc} = 
+renderSquare y x {item, monster, pcs} = 
     let ground = getImage "Ground"
         grp = oneOf [
-                (pc |> Maybe.map renderPC),
+                (head pcs |> Maybe.map renderPC),
                 (monster |> Maybe.map renderMonster),
                 (item |> Maybe.map renderItem)
             ]
