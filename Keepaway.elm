@@ -26,11 +26,11 @@ updates = mailbox Idle
 init : (a,Seed) -> Model
 init (_,s) = {
         player={
-                alive=False,
-                carrying=Nothing,
-                points=0,
-                position=(0,0)
-            },
+            alive=False,
+            carrying=Nothing,
+            points=0,
+            position=(4,4)
+        },
         seed=s,
         grid=foldl (\y g -> foldl (\x g'-> insert (y,x) emptySquare g') g xRange) empty yRange
     } 

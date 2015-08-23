@@ -6,8 +6,9 @@ each Square a "widget", but the data's awfully intertwined, by necessity.
 
 -}
 
+import Color exposing (green, red)
 import Dict exposing (get)
-import Graphics.Collage exposing (collage, filled, Form, group, move, moveX, outlined, solid, square, text, toForm)
+import Graphics.Collage exposing (collage, filled, Form, group, move, moveX, moveY, outlined, rect, solid, square, text, toForm)
 import Graphics.Element exposing (Element, image)
 import List exposing (filter, head, map, reverse, sortBy)
 import Maybe exposing (andThen, oneOf, withDefault)
@@ -54,6 +55,15 @@ renderPC pc =
             |> Maybe.map renderStun
             |> Maybe.map (flip (::) [base]>>reverse>>group)
             |> withDefault base
+
+renderHP : Int -> Int -> Form
+renderHP currentHP maxHP =
+    let max = rect tileSize (tileSize/5)
+            |> filled red
+        current = rect (tileSize * (toFloat currentHP)/(toFloat maxHP)) (tileSize/5)
+            |> filled green
+    in group [max, current]
+            |> moveY (tileSize * -0.3)
 
 renderMonster : Monster -> Form
 renderMonster monster =
